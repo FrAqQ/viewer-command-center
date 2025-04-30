@@ -10,11 +10,13 @@ import { Progress } from '@/components/ui/progress';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Copy, Power, RefreshCw, Plus, Trash2, ServerCrash, Check } from 'lucide-react';
+import { Copy, Power, RefreshCw, Plus, Trash2, ServerCrash, Check, Loader2 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
+import { Skeleton } from '@/components/ui/skeleton';
+import SetupGuide from '@/components/dashboard/SetupGuide';
 
 const SlavesPage = () => {
-  const { slaves, addSlave, updateSlave, removeSlave } = useApp();
+  const { slaves, addSlave, updateSlave, removeSlave, isLoading } = useApp();
   const [newSlave, setNewSlave] = useState<Partial<SlaveServer>>({
     name: '',
     hostname: '',
@@ -55,6 +57,26 @@ const SlavesPage = () => {
     updateSlave(id, { status: 'online', lastSeen: new Date().toISOString() });
     toast.success("Reconnection successful");
   };
+  
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold mb-2">Slave Servers</h1>
+            <p className="text-muted-foreground">Loading data from Supabase...</p>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Skeleton className="h-[200px]" />
+            <Skeleton className="h-[200px] md:col-span-2" />
+          </div>
+          
+          <Skeleton className="h-[400px]" />
+        </div>
+      </Layout>
+    );
+  }
   
   return (
     <Layout>
@@ -142,20 +164,25 @@ const SlavesPage = () => {
           
           <Card className="md:col-span-2">
             <CardHeader className="pb-2">
-              <CardTitle className="text-lg">Connection Details</CardTitle>
-              <CardDescription>Setup information for new slave servers</CardDescription>
+              <CardTitle className="text-lg">Supabase Connection</CardTitle>
+              <CardDescription>Ready to receive and send data to Supabase</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                <div className="flex items-center gap-2 text-status-success">
+                  <Check className="h-4 w-4" />
+                  <span className="text-sm font-medium">Connected to Supabase</span>
+                </div>
+                
                 <div className="space-y-1">
-                  <Label>API Base URL</Label>
+                  <Label>Project ID</Label>
                   <div className="flex items-center">
                     <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm flex-1">
-                      https://master-controller.example.com/api
+                      qdxpxqdewqrbvlsajeeo
                     </code>
                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0 ml-2" onClick={() => {
-                      navigator.clipboard.writeText("https://master-controller.example.com/api");
-                      toast.success("API URL copied to clipboard");
+                      navigator.clipboard.writeText("qdxpxqdewqrbvlsajeeo");
+                      toast.success("Project ID copied to clipboard");
                     }}>
                       <Copy className="h-4 w-4" />
                     </Button>
@@ -163,14 +190,14 @@ const SlavesPage = () => {
                 </div>
                 
                 <div className="space-y-1">
-                  <Label>Registration Command</Label>
+                  <Label>Supabase URL</Label>
                   <div className="flex items-center">
                     <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm flex-1 overflow-auto">
-                      {`curl -X POST https://master-controller.example.com/api/register_slave -H "Content-Type: application/json" -d '{"name":"SLAVE_NAME","hostname":"HOST_NAME","ip":"IP_ADDRESS","token":"YOUR_API_KEY"}'`}
+                      https://qdxpxqdewqrbvlsajeeo.supabase.co
                     </code>
                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0 ml-2" onClick={() => {
-                      navigator.clipboard.writeText('curl -X POST https://master-controller.example.com/api/register_slave -H "Content-Type: application/json" -d \'{"name":"SLAVE_NAME","hostname":"HOST_NAME","ip":"IP_ADDRESS","token":"YOUR_API_KEY"}\'');
-                      toast.success("Command copied to clipboard");
+                      navigator.clipboard.writeText('https://qdxpxqdewqrbvlsajeeo.supabase.co');
+                      toast.success("Supabase URL copied to clipboard");
                     }}>
                       <Copy className="h-4 w-4" />
                     </Button>
@@ -180,6 +207,8 @@ const SlavesPage = () => {
             </CardContent>
           </Card>
         </div>
+        
+        <SetupGuide />
         
         <Card>
           <CardHeader>

@@ -9,10 +9,11 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ViewerInstance } from '@/types';
 import { useApp } from '@/context/AppContext';
-import { PlayCircle, Plus, Minus, StopCircle } from 'lucide-react';
+import { PlayCircle, Plus, Minus, StopCircle, Loader2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const TestViewerPage = () => {
-  const { addViewer, removeViewer, updateViewer, viewers, proxies } = useApp();
+  const { addViewer, removeViewer, updateViewer, viewers, proxies, isLoading } = useApp();
   const [url, setUrl] = useState('https://twitch.tv/');
   const [logs, setLogs] = useState<string[]>(() => {
     try {
@@ -84,6 +85,26 @@ const TestViewerPage = () => {
     setLogs([]);
     addLog('Logs cleared');
   };
+  
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold mb-2">Test Viewer</h1>
+            <p className="text-muted-foreground mb-6">Loading data from Supabase...</p>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Skeleton className="h-[300px]" />
+            <Skeleton className="h-[300px]" />
+          </div>
+          
+          <Skeleton className="h-[400px]" />
+        </div>
+      </Layout>
+    );
+  }
   
   return (
     <Layout>
