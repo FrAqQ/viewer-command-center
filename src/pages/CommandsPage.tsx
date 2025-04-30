@@ -220,19 +220,35 @@ const CommandsPage = () => {
                 </TabsList>
                 
                 <TabsContent value="all">
-                  <CommandsList commands={commands} />
+                  <CommandsList 
+                    commands={commands} 
+                    getCommandStatusColor={getCommandStatusColor}
+                    getCommandTypeIcon={getCommandTypeIcon}
+                  />
                 </TabsContent>
                 
                 <TabsContent value="pending">
-                  <CommandsList commands={commands.filter(cmd => cmd.status === 'pending')} />
+                  <CommandsList 
+                    commands={commands.filter(cmd => cmd.status === 'pending')}
+                    getCommandStatusColor={getCommandStatusColor}
+                    getCommandTypeIcon={getCommandTypeIcon}
+                  />
                 </TabsContent>
                 
                 <TabsContent value="executed">
-                  <CommandsList commands={commands.filter(cmd => cmd.status === 'executed')} />
+                  <CommandsList 
+                    commands={commands.filter(cmd => cmd.status === 'executed')}
+                    getCommandStatusColor={getCommandStatusColor}
+                    getCommandTypeIcon={getCommandTypeIcon}
+                  />
                 </TabsContent>
                 
                 <TabsContent value="failed">
-                  <CommandsList commands={commands.filter(cmd => cmd.status === 'failed')} />
+                  <CommandsList 
+                    commands={commands.filter(cmd => cmd.status === 'failed')}
+                    getCommandStatusColor={getCommandStatusColor}
+                    getCommandTypeIcon={getCommandTypeIcon}
+                  />
                 </TabsContent>
               </Tabs>
             </CardContent>
@@ -245,9 +261,11 @@ const CommandsPage = () => {
 
 interface CommandsListProps {
   commands: Command[];
+  getCommandStatusColor: (status: string) => string;
+  getCommandTypeIcon: (type: string) => React.ReactNode;
 }
 
-const CommandsList: React.FC<CommandsListProps> = ({ commands }) => {
+const CommandsList: React.FC<CommandsListProps> = ({ commands, getCommandStatusColor, getCommandTypeIcon }) => {
   if (commands.length === 0) {
     return (
       <div className="text-center py-8">
