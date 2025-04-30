@@ -1,5 +1,5 @@
 
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { SlaveServer, Proxy, ViewerInstance, Command, LogEntry } from '../types';
 import { mockSlaves, mockProxies, mockViewers, mockCommands, mockLogs } from '../data/mockData';
 import { toast } from '@/components/ui/sonner';
@@ -24,16 +24,69 @@ interface AppContextProps {
   updateCommand: (id: string, data: Partial<Command>) => void;
   addLog: (log: LogEntry) => void;
   clearLogs: () => void;
+  resetToDefaults: () => void;
 }
 
 const AppContext = createContext<AppContextProps | undefined>(undefined);
 
+// Helper functions to load data from localStorage
+const loadFromStorage = <T extends unknown>(key: string, defaultData: T): T => {
+  try {
+    const storedData = localStorage.getItem(key);
+    return storedData ? JSON.parse(storedData) : defaultData;
+  } catch (error) {
+    console.error(`Error loading ${key} from localStorage:`, error);
+    return defaultData;
+  }
+};
+
+// Helper function to save data to localStorage
+const saveToStorage = <T extends unknown>(key: string, data: T): void => {
+  try {
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (error) {
+    console.error(`Error saving ${key} to localStorage:`, error);
+    toast.error(`Failed to save data: ${(error as Error).message}`);
+  }
+};
+
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-  const [slaves, setSlaves] = useState<SlaveServer[]>(mockSlaves);
-  const [proxies, setProxies] = useState<Proxy[]>(mockProxies);
-  const [viewers, setViewers] = useState<ViewerInstance[]>(mockViewers);
-  const [commands, setCommands] = useState<Command[]>(mockCommands);
-  const [logs, setLogs] = useState<LogEntry[]>(mockLogs);
+  // Initialize state from localStorage or use mock data as defaults
+  const [slaves, setSlaves] = useState<SlaveServer[]>(() => 
+    loadFromStorage('slaves', mockSlaves));
+  
+  const [proxies, setProxies] = useState<Proxy[]>(() => 
+    loadFromStorage('proxies', mockProxies));
+  
+  const [viewers, setViewers] = useState<ViewerInstance[]>(() => 
+    loadFromStorage('viewers', mockViewers));
+  
+  const [commands, setCommands] = useState<Command[]>(() => 
+    loadFromStorage('commands', mockCommands));
+  
+  const [logs, setLogs] = useState<LogEntry[]>(() => 
+    loadFromStorage('logs', mockLogs));
+
+  // Update localStorage whenever state changes
+  useEffect(() => {
+    saveToStorage('slaves', slaves);
+  }, [slaves]);
+
+  useEffect(() => {
+    saveToStorage('proxies', proxies);
+  }, [proxies]);
+
+  useEffect(() => {
+    saveToStorage('viewers', viewers);
+  }, [viewers]);
+
+  useEffect(() => {
+    saveToStorage('commands', commands);
+  }, [commands]);
+
+  useEffect(() => {
+    saveToStorage('logs', logs);
+  }, [logs]);
 
   const addSlave = (slave: SlaveServer) => {
     setSlaves((prev) => [...prev, slave]);
@@ -67,7 +120,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const importProxies = (text: string) => {
-    const lines = text.split('\\n').filter(line => line.trim() !== '');
+    const lines = text.split('\n').filter(line => line.trim() !== '');
     
     const newProxies: Proxy[] = lines.map((line, index) => {
       const parts = line.split(':');
@@ -201,6 +254,15 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     toast.info("Logs cleared");
   };
 
+  const resetToDefaults = () => {
+    setSlaves(mockSlaves);
+    setProxies(mockProxies);
+    setViewers(mockViewers);
+    setCommands(mockCommands);
+    setLogs(mockLogs);
+    toast.info("All data has been reset to defaults");
+  };
+
   const value = {
     slaves,
     proxies,
@@ -221,6 +283,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
     updateCommand,
     addLog,
     clearLogs,
+    resetToDefaults,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

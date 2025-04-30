@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,9 +14,22 @@ import { PlayCircle, Plus, Minus, StopCircle } from 'lucide-react';
 const TestViewerPage = () => {
   const { addViewer, removeViewer, updateViewer, viewers, proxies } = useApp();
   const [url, setUrl] = useState('https://twitch.tv/');
-  const [logs, setLogs] = useState<string[]>([]);
+  const [logs, setLogs] = useState<string[]>(() => {
+    try {
+      const savedLogs = localStorage.getItem('viewerTestLogs');
+      return savedLogs ? JSON.parse(savedLogs) : [];
+    } catch (error) {
+      console.error('Failed to load logs from localStorage:', error);
+      return [];
+    }
+  });
   
   const localViewers = viewers.filter(v => !v.slaveId);
+  
+  // Save logs to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('viewerTestLogs', JSON.stringify(logs));
+  }, [logs]);
   
   const addLog = (message: string) => {
     setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${message}`, ...prev]);
@@ -67,12 +80,17 @@ const TestViewerPage = () => {
     addLog(`Stopped viewer instance`);
   };
   
+  const handleClearLogs = () => {
+    setLogs([]);
+    addLog('Logs cleared');
+  };
+  
   return (
     <Layout>
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold mb-2">Test Viewer</h1>
-          <p className="text-muted-foreground mb-6">Run local tests before deploying to slaves</p>
+          <p className="text-muted-foreground mb-6">Run local tests for your viewers</p>
         </div>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -126,8 +144,11 @@ const TestViewerPage = () => {
           </Card>
           
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Viewer Logs</CardTitle>
+              <Button variant="outline" size="sm" onClick={handleClearLogs}>
+                Clear Logs
+              </Button>
             </CardHeader>
             <CardContent>
               <ScrollArea className="h-[200px] w-full rounded-md border p-2 bg-muted/30">
