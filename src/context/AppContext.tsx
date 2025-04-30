@@ -4,6 +4,7 @@ import { SlaveServer, Proxy, ViewerInstance, Command, LogEntry } from '../types'
 import { mockSlaves, mockProxies, mockViewers, mockCommands, mockLogs } from '../data/mockData';
 import { toast } from '@/components/ui/sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { Json } from '@/integrations/supabase/types';
 
 interface AppContextProps {
   slaves: SlaveServer[];
@@ -78,7 +79,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             name: s.name,
             hostname: s.hostname,
             ip: s.ip,
-            status: s.status,
+            status: s.status as 'online' | 'offline' | 'error',
             lastSeen: s.last_seen,
             metrics: {
               cpu: s.cpu || 0,
@@ -121,7 +122,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
             slaveId: v.slave_id,
             url: v.url,
             proxy: v.proxy_id, // We should fetch the proxy details in a real app
-            status: v.status,
+            status: v.status as 'running' | 'stopped' | 'error',
             startTime: v.start_time,
             error: v.error
           }));
@@ -137,11 +138,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         if (commandsData?.length) {
           const formattedCommands: Command[] = commandsData.map(c => ({
             id: c.id,
-            type: c.type,
+            type: c.type as 'spawn' | 'stop' | 'update_proxy' | 'reconnect' | 'custom',
             target: c.target,
-            payload: c.payload || {},
+            payload: c.payload as Record<string, any> || {},
             timestamp: c.timestamp,
-            status: c.status
+            status: c.status as 'pending' | 'executed' | 'failed'
           }));
           setCommands(formattedCommands);
         }
@@ -158,10 +159,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           const formattedLogs: LogEntry[] = logsData.map(l => ({
             id: l.id,
             timestamp: l.timestamp,
-            level: l.level,
+            level: l.level as 'info' | 'warning' | 'error',
             source: l.source,
             message: l.message,
-            details: l.details
+            details: l.details as Record<string, any> | undefined
           }));
           setLogs(formattedLogs);
         }
@@ -209,10 +210,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           const newLog: LogEntry = {
             id: payload.new.id,
             timestamp: payload.new.timestamp,
-            level: payload.new.level,
+            level: payload.new.level as 'info' | 'warning' | 'error',
             source: payload.new.source,
             message: payload.new.message,
-            details: payload.new.details
+            details: payload.new.details as Record<string, any> | undefined
           };
           setLogs(prev => [newLog, ...prev]);
         }
@@ -253,7 +254,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           name: data[0].name,
           hostname: data[0].hostname,
           ip: data[0].ip,
-          status: data[0].status,
+          status: data[0].status as 'online' | 'offline' | 'error',
           lastSeen: data[0].last_seen,
           metrics: {
             cpu: data[0].cpu || 0,
@@ -480,7 +481,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       // First, need to find the proxy ID if a proxy string is provided
       let proxyId = null;
       if (viewer.proxy) {
-        const proxyParts = viewer.proxy.split(':');
+        const proxyParts = typeof viewer.proxy === 'string' ? viewer.proxy.split(':') : [];
         if (proxyParts.length >= 2) {
           const { data: proxyData } = await supabase
             .from('proxies')
@@ -516,7 +517,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           slaveId: data[0].slave_id,
           url: data[0].url,
           proxy: viewer.proxy, // Keep original proxy string for UI display
-          status: data[0].status,
+          status: data[0].status as 'running' | 'stopped' | 'error',
           startTime: data[0].start_time,
           error: data[0].error
         };
@@ -627,11 +628,11 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       if (data && data[0]) {
         const newCommand: Command = {
           id: data[0].id,
-          type: data[0].type,
+          type: data[0].type as 'spawn' | 'stop' | 'update_proxy' | 'reconnect' | 'custom',
           target: data[0].target,
-          payload: data[0].payload || {},
+          payload: data[0].payload as Record<string, any> || {},
           timestamp: data[0].timestamp,
-          status: data[0].status
+          status: data[0].status as 'pending' | 'executed' | 'failed'
         };
         setCommands(prev => [...prev, newCommand]);
       }
@@ -696,10 +697,10 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         const newLog: LogEntry = {
           id: data[0].id,
           timestamp: data[0].timestamp,
-          level: data[0].level,
+          level: data[0].level as 'info' | 'warning' | 'error',
           source: data[0].source,
           message: data[0].message,
-          details: data[0].details
+          details: data[0].details as Record<string, any> | undefined
         };
         // Not setting logs state here as it will be updated via the realtime subscription
       }
