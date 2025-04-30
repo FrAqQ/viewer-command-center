@@ -166,7 +166,7 @@ const SlavesPage = () => {
                   <Label>Registration Command</Label>
                   <div className="flex items-center">
                     <code className="relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm flex-1 overflow-auto">
-                      curl -X POST https://master-controller.example.com/api/register_slave -H "Content-Type: application/json" -d '{"name":"SLAVE_NAME","hostname":"HOST_NAME","ip":"IP_ADDRESS","token":"YOUR_API_KEY"}'
+                      {`curl -X POST https://master-controller.example.com/api/register_slave -H "Content-Type: application/json" -d '{"name":"SLAVE_NAME","hostname":"HOST_NAME","ip":"IP_ADDRESS","token":"YOUR_API_KEY"}'`}
                     </code>
                     <Button variant="ghost" size="sm" className="h-8 w-8 p-0 ml-2" onClick={() => {
                       navigator.clipboard.writeText('curl -X POST https://master-controller.example.com/api/register_slave -H "Content-Type: application/json" -d \'{"name":"SLAVE_NAME","hostname":"HOST_NAME","ip":"IP_ADDRESS","token":"YOUR_API_KEY"}\'');
