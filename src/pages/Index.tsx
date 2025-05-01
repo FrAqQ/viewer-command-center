@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import Layout from '@/components/Layout';
 import StatusDashboard from '@/components/dashboard/StatusDashboard';
 import SlaveStatusCard from '@/components/dashboard/SlaveStatusCard';
@@ -9,9 +9,17 @@ import CommandPanel from '@/components/dashboard/CommandPanel';
 import { useApp } from '@/context/AppContext';
 import { Command } from '@/types';
 import { toast } from '@/components/ui/sonner';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Copy, Key } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const Index = () => {
   const { slaves, viewers, logs, addCommand, updateSlave, removeViewer, clearLogs } = useApp();
+  const [apiKey, setApiKey] = useState<string>('');
+  const [showApiKey, setShowApiKey] = useState<boolean>(false);
   
   const handleReconnectSlave = (id: string) => {
     // In a real application, this would send a reconnect signal to the slave
@@ -50,12 +58,93 @@ const Index = () => {
     removeViewer(id);
   };
   
+  const generateApiKey = () => {
+    // Generate a random API key (for demo purposes)
+    const randomKey = Array(64)
+      .fill(0)
+      .map(() => Math.floor(Math.random() * 16).toString(16))
+      .join("");
+    setApiKey(randomKey);
+    toast.success("API key generated. Don't forget to set it as a secret in your Supabase Edge Function settings.");
+  };
+  
+  const copyApiKey = () => {
+    navigator.clipboard.writeText(apiKey);
+    toast.success("API key copied to clipboard");
+  };
+  
   return (
     <Layout>
       <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold mb-2">Dashboard</h1>
-          <p className="text-muted-foreground mb-6">Monitor and control your viewer network</p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold mb-2">Dashboard</h1>
+            <p className="text-muted-foreground mb-6">Monitor and control your viewer network</p>
+          </div>
+          
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Key className="h-4 w-4 mr-2" />
+                Manage API Key
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>API Key Management</DialogTitle>
+                <DialogDescription>
+                  Generate and manage API keys for secure slave authentication.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="apikey">API Key</Label>
+                  <div className="flex space-x-2">
+                    <Input 
+                      id="apikey" 
+                      value={apiKey} 
+                      type={showApiKey ? "text" : "password"}
+                      placeholder="No API key generated"
+                      readOnly
+                    />
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowApiKey(!showApiKey)}
+                    >
+                      {showApiKey ? "Hide" : "Show"}
+                    </Button>
+                  </div>
+                </div>
+                
+                <div className="flex justify-between">
+                  <Button variant="outline" onClick={generateApiKey}>
+                    Generate New Key
+                  </Button>
+                  <Button variant="secondary" onClick={copyApiKey} disabled={!apiKey}>
+                    <Copy className="mr-2 h-4 w-4" />
+                    Copy Key
+                  </Button>
+                </div>
+                
+                <Alert className="mt-2">
+                  <AlertDescription className="text-sm">
+                    After generating a new API key, make sure to:
+                    <ul className="list-disc pl-4 mt-2">
+                      <li>Add it to your Supabase edge function secrets with name <code>API_SECRET_KEY</code></li>
+                      <li>Update all your slave clients with this key</li>
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              </div>
+              
+              <DialogFooter>
+                <Button onClick={() => toast.success("Remember to update your Supabase secrets")}>
+                  Done
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
         
         <StatusDashboard />

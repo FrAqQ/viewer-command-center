@@ -8,12 +8,13 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.42.0";
 // CORS headers for browser access
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key',
 };
 
 // Environment variables
 const supabaseUrl = Deno.env.get('SUPABASE_URL') as string;
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') as string;
+const apiSecretKey = Deno.env.get('API_SECRET_KEY') as string;
 
 // Create a Supabase client
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -44,6 +45,16 @@ serve(async (req) => {
     if (req.method !== 'POST') {
       return new Response(JSON.stringify({ error: 'Method not allowed' }), {
         status: 405,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Validate API key
+    const apiKey = req.headers.get('x-api-key');
+    if (!apiKey || apiKey !== apiSecretKey) {
+      console.error('Invalid API key provided');
+      return new Response(JSON.stringify({ error: 'Unauthorized: Invalid API key' }), {
+        status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
