@@ -41,7 +41,7 @@ cd ~/viewer-slave
 npm init -y
 npm install axios @supabase/supabase-js playwright os-utils node-cron`;
 
-  // Fixed the slaveCode template string to reference the proper variables
+  // Fixed the slaveCode template string to properly reference the variables
   const slaveCode = `// slave.js - Basic Slave Client for Viewer Network
 const axios = require('axios');
 const os = require('os');
