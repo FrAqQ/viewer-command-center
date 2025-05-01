@@ -9,63 +9,196 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Proxy } from '@/types';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RefreshCw, Check, X, Upload, Download, Plus, Trash2 } from 'lucide-react';
-import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { toast } from '@/components/ui/sonner';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const ProxyPage = () => {
-  const { proxies, addProxy, updateProxy, removeProxy, importProxies } = useApp();
+  const { proxies, addProxy, updateProxy, removeProxy, importProxies, isLoading } = useApp();
   const [proxyUrl, setProxyUrl] = useState('');
   const [proxyText, setProxyText] = useState('');
   const [loading, setLoading] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newProxy, setNewProxy] = useState({ address: '', port: '', username: '', password: '' });
+  const [testingProxies, setTestingProxies] = useState<string[]>([]);
   
   const validProxies = proxies.filter(proxy => proxy.valid);
   const invalidProxies = proxies.filter(proxy => !proxy.valid);
   
-  const handleFetchProxies = () => {
-    if (!proxyUrl.trim()) return;
+  const handleFetchProxies = async () => {
+    if (!proxyUrl.trim()) {
+      toast.error('Please enter a proxy URL');
+      return;
+    }
     
     setLoading(true);
     
-    // Simulate fetching proxies from URL
-    setTimeout(() => {
-      // In a real application, you would fetch proxies from the URL
-      const sampleText = "185.199.228.220:7300:user1:pass1\n185.199.229.156:7300:user2:pass2\n185.199.231.45:8080:user3:pass3";
-      setProxyText(sampleText);
-      importProxies(sampleText);
+    try {
+      // Attempt to fetch proxies from URL
+      const response = await fetch(proxyUrl);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch from URL: ${response.status} ${response.statusText}`);
+      }
+      
+      const text = await response.text();
+      setProxyText(text);
+      toast.success('Proxies fetched successfully');
+      
+      // Import the fetched proxies
+      importProxies(text);
+    } catch (error) {
+      console.error('Error fetching proxies:', error);
+      toast.error(`Failed to fetch proxies: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
   
   const handleImportFromText = () => {
-    if (!proxyText.trim()) return;
+    if (!proxyText.trim()) {
+      toast.error('Please enter proxy data');
+      return;
+    }
+    
     importProxies(proxyText);
+    toast.success('Proxies imported successfully');
   };
   
-  const handleToggleProxyStatus = (id: string, currentStatus: boolean) => {
-    updateProxy(id, { valid: !currentStatus });
+  const handleToggleProxyStatus = async (id: string, currentStatus: boolean) => {
+    try {
+      await updateProxy(id, { valid: !currentStatus });
+      toast.success(`Proxy marked as ${!currentStatus ? 'valid' : 'invalid'}`);
+    } catch (error) {
+      toast.error('Failed to update proxy status');
+      console.error(error);
+    }
   };
   
-  const handleAddProxy = () => {
-    if (!newProxy.address || !newProxy.port) return;
+  const handleAddProxy = async () => {
+    if (!newProxy.address || !newProxy.port) {
+      toast.error('Address and port are required');
+      return;
+    }
     
-    const proxy: Proxy = {
-      id: `proxy-${Date.now()}`,
-      address: newProxy.address,
-      port: newProxy.port,
-      username: newProxy.username,
-      password: newProxy.password,
-      valid: true,
-      lastChecked: new Date().toISOString(),
-      failCount: 0
-    };
-    
-    addProxy(proxy);
-    setNewProxy({ address: '', port: '', username: '', password: '' });
-    setShowAddDialog(false);
+    try {
+      const proxy: Proxy = {
+        id: `proxy-${Date.now()}`,
+        address: newProxy.address,
+        port: newProxy.port,
+        username: newProxy.username,
+        password: newProxy.password,
+        valid: true,
+        lastChecked: new Date().toISOString(),
+        failCount: 0
+      };
+      
+      await addProxy(proxy);
+      setNewProxy({ address: '', port: '', username: '', password: '' });
+      setShowAddDialog(false);
+      toast.success('Proxy added successfully');
+    } catch (error) {
+      toast.error('Failed to add proxy');
+      console.error(error);
+    }
   };
+  
+  const handleRemoveProxy = async (id: string) => {
+    try {
+      await removeProxy(id);
+      toast.success('Proxy removed');
+    } catch (error) {
+      toast.error('Failed to remove proxy');
+      console.error(error);
+    }
+  };
+  
+  const handleExportProxies = () => {
+    // Generate export text in format: ip:port:username:password
+    const exportText = proxies
+      .filter(proxy => proxy.valid)
+      .map(proxy => {
+        if (proxy.username && proxy.password) {
+          return `${proxy.address}:${proxy.port}:${proxy.username}:${proxy.password}`;
+        } else {
+          return `${proxy.address}:${proxy.port}`;
+        }
+      })
+      .join('\n');
+    
+    if (!exportText) {
+      toast.error('No valid proxies to export');
+      return;
+    }
+    
+    // Create a blob and download it
+    const blob = new Blob([exportText], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `proxies-${new Date().toISOString().split('T')[0]}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    toast.success('Proxies exported successfully');
+  };
+  
+  const handleTestAllProxies = async () => {
+    if (proxies.length === 0) {
+      toast.error('No proxies to test');
+      return;
+    }
+    
+    // Set all proxies to testing state
+    const proxyIds = proxies.map(proxy => proxy.id);
+    setTestingProxies(proxyIds);
+    
+    // Simulate testing proxies one by one
+    for (const proxy of proxies) {
+      // Simulate API call to test proxy
+      const delay = Math.random() * 1000 + 500; // Random delay between 500ms and 1500ms
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+      const isValid = Math.random() > 0.3; // 70% chance of success for demo
+      const newFailCount = isValid ? 0 : proxy.failCount + 1;
+      
+      await updateProxy(proxy.id, {
+        valid: isValid,
+        lastChecked: new Date().toISOString(),
+        failCount: newFailCount
+      });
+      
+      // Remove from testing state
+      setTestingProxies(prev => prev.filter(id => id !== proxy.id));
+    }
+    
+    toast.success('All proxies tested');
+  };
+  
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="space-y-6">
+          <div>
+            <h1 className="text-2xl font-bold mb-2">Proxy Management</h1>
+            <p className="text-muted-foreground mb-6">Loading data from Supabase...</p>
+          </div>
+          
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Skeleton className="h-[400px]" />
+            <Skeleton className="h-[400px]" />
+          </div>
+          
+          <Skeleton className="h-[400px]" />
+        </div>
+      </Layout>
+    );
+  }
   
   return (
     <Layout>
@@ -116,6 +249,13 @@ const ProxyPage = () => {
                   onChange={(e) => setProxyText(e.target.value)}
                   rows={6}
                 />
+                <p className="text-xs text-muted-foreground">
+                  Each line should be in one of the formats:
+                  <br />
+                  - ip:port
+                  <br />
+                  - ip:port:username:password
+                </p>
               </div>
             </CardContent>
             <CardFooter className="flex justify-between">
@@ -123,7 +263,7 @@ const ProxyPage = () => {
                 <Trash2 className="h-4 w-4 mr-1" />
                 Clear
               </Button>
-              <Button onClick={handleImportFromText}>
+              <Button onClick={handleImportFromText} disabled={!proxyText.trim()}>
                 <Upload className="h-4 w-4 mr-1" />
                 Import
               </Button>
@@ -212,55 +352,85 @@ const ProxyPage = () => {
                 </div>
               </div>
               <p className="text-sm text-muted-foreground mb-2">
-                {proxies.length} proxies in total. Last checked {proxies.length > 0 ? new Date().toLocaleTimeString() : 'never'}.
+                {proxies.length} proxies in total. Last checked {
+                  proxies.length > 0 && proxies.some(p => p.lastChecked) 
+                    ? new Date(Math.max(...proxies.filter(p => p.lastChecked).map(p => new Date(p.lastChecked!).getTime()))).toLocaleString() 
+                    : 'never'
+                }.
               </p>
             </CardContent>
             <CardFooter>
-              <Button variant="outline" className="w-full">
-                <RefreshCw className="h-4 w-4 mr-1" />
-                Test All Proxies
+              <Button 
+                variant="outline" 
+                className="w-full"
+                onClick={handleTestAllProxies}
+                disabled={testingProxies.length > 0 || proxies.length === 0}
+              >
+                {testingProxies.length > 0 ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-1 animate-spin" />
+                    Testing Proxies ({testingProxies.length})...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-1" />
+                    Test All Proxies
+                  </>
+                )}
               </Button>
             </CardFooter>
           </Card>
         </div>
         
-        <Tabs defaultValue="valid">
-          <div className="flex justify-between items-center mb-2">
-            <TabsList>
-              <TabsTrigger value="valid">Valid Proxies</TabsTrigger>
-              <TabsTrigger value="invalid">Invalid Proxies</TabsTrigger>
-              <TabsTrigger value="all">All Proxies</TabsTrigger>
-            </TabsList>
-            <Button variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-1" />
-              Export List
-            </Button>
-          </div>
-          
-          <TabsContent value="valid">
-            <ProxyTable 
-              proxies={validProxies} 
-              onToggleStatus={handleToggleProxyStatus} 
-              onRemove={removeProxy} 
-            />
-          </TabsContent>
-          
-          <TabsContent value="invalid">
-            <ProxyTable 
-              proxies={invalidProxies} 
-              onToggleStatus={handleToggleProxyStatus} 
-              onRemove={removeProxy} 
-            />
-          </TabsContent>
-          
-          <TabsContent value="all">
-            <ProxyTable 
-              proxies={proxies} 
-              onToggleStatus={handleToggleProxyStatus} 
-              onRemove={removeProxy} 
-            />
-          </TabsContent>
-        </Tabs>
+        {proxies.length === 0 ? (
+          <Alert>
+            <AlertTitle>No proxies found</AlertTitle>
+            <AlertDescription>
+              Add proxies by pasting a list in the text area above or by adding them one by one.
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <Tabs defaultValue="valid">
+            <div className="flex justify-between items-center mb-2">
+              <TabsList>
+                <TabsTrigger value="valid">Valid Proxies</TabsTrigger>
+                <TabsTrigger value="invalid">Invalid Proxies</TabsTrigger>
+                <TabsTrigger value="all">All Proxies</TabsTrigger>
+              </TabsList>
+              <Button variant="outline" size="sm" onClick={handleExportProxies}>
+                <Download className="h-4 w-4 mr-1" />
+                Export List
+              </Button>
+            </div>
+            
+            <TabsContent value="valid">
+              <ProxyTable 
+                proxies={validProxies} 
+                onToggleStatus={handleToggleProxyStatus} 
+                onRemove={handleRemoveProxy} 
+                testingIds={testingProxies}
+              />
+            </TabsContent>
+            
+            <TabsContent value="invalid">
+              <ProxyTable 
+                proxies={invalidProxies} 
+                onToggleStatus={handleToggleProxyStatus} 
+                onRemove={handleRemoveProxy} 
+                testingIds={testingProxies}
+              />
+            </TabsContent>
+            
+            <TabsContent value="all">
+              <ProxyTable 
+                proxies={proxies} 
+                onToggleStatus={handleToggleProxyStatus} 
+                onRemove={handleRemoveProxy} 
+                testingIds={testingProxies}
+              />
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
     </Layout>
   );
@@ -270,9 +440,10 @@ interface ProxyTableProps {
   proxies: Proxy[];
   onToggleStatus: (id: string, currentStatus: boolean) => void;
   onRemove: (id: string) => void;
+  testingIds: string[];
 }
 
-const ProxyTable: React.FC<ProxyTableProps> = ({ proxies, onToggleStatus, onRemove }) => {
+const ProxyTable: React.FC<ProxyTableProps> = ({ proxies, onToggleStatus, onRemove, testingIds }) => {
   if (proxies.length === 0) {
     return (
       <div className="border rounded-md p-8 text-center">
@@ -297,15 +468,21 @@ const ProxyTable: React.FC<ProxyTableProps> = ({ proxies, onToggleStatus, onRemo
         </TableHeader>
         <TableBody>
           {proxies.map((proxy) => (
-            <TableRow key={proxy.id}>
+            <TableRow key={proxy.id} className={testingIds.includes(proxy.id) ? "opacity-70" : ""}>
               <TableCell>
-                <span className={`status-dot ${proxy.valid ? 'success' : 'danger'}`} />
+                <div className="flex items-center">
+                  {testingIds.includes(proxy.id) ? (
+                    <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
+                  ) : (
+                    <span className={`status-dot ${proxy.valid ? 'success' : 'danger'}`} />
+                  )}
+                </div>
               </TableCell>
               <TableCell className="font-medium">{proxy.address}</TableCell>
               <TableCell>{proxy.port}</TableCell>
               <TableCell>{proxy.username && proxy.password ? 'Yes' : 'No'}</TableCell>
               <TableCell>{proxy.failCount}</TableCell>
-              <TableCell>{proxy.lastChecked ? new Date(proxy.lastChecked).toLocaleTimeString() : 'Never'}</TableCell>
+              <TableCell>{proxy.lastChecked ? new Date(proxy.lastChecked).toLocaleString() : 'Never'}</TableCell>
               <TableCell>
                 <div className="flex space-x-1">
                   <Button
@@ -313,6 +490,7 @@ const ProxyTable: React.FC<ProxyTableProps> = ({ proxies, onToggleStatus, onRemo
                     variant="ghost"
                     className="h-8 w-8 p-0"
                     onClick={() => onToggleStatus(proxy.id, proxy.valid)}
+                    disabled={testingIds.includes(proxy.id)}
                     title={proxy.valid ? 'Mark as invalid' : 'Mark as valid'}
                   >
                     {proxy.valid ? <X className="h-4 w-4" /> : <Check className="h-4 w-4" />}
@@ -322,6 +500,7 @@ const ProxyTable: React.FC<ProxyTableProps> = ({ proxies, onToggleStatus, onRemo
                     variant="ghost"
                     className="h-8 w-8 p-0"
                     onClick={() => onRemove(proxy.id)}
+                    disabled={testingIds.includes(proxy.id)}
                     title="Remove proxy"
                   >
                     <Trash2 className="h-4 w-4" />

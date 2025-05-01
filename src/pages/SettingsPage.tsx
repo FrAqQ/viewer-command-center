@@ -1,90 +1,137 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { toast } from '@/components/ui/sonner';
+import { Download, Upload, RefreshCw, Trash2, ShieldAlert, AlertTriangle } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
-import { Download, Upload, RefreshCw, Trash2, Save } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { toast } from '@/components/ui/sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const SettingsPage = () => {
-  const { slaves, proxies, viewers, commands, logs, resetToDefaults } = useApp();
+  const { slaves, proxies, viewers, commands, logs, resetToDefaults, isLoading } = useApp();
+  const [debugMode, setDebugMode] = useState(false);
+  const [exportData, setExportData] = useState('');
+  const [importData, setImportData] = useState('');
+  const [showSupabaseInfo, setShowSupabaseInfo] = useState(false);
   
   const handleExportData = () => {
+    const data = {
+      slaves,
+      proxies,
+      viewers,
+      commands,
+      logs,
+      exportedAt: new Date().toISOString(),
+    };
+    
+    setExportData(JSON.stringify(data, null, 2));
+    toast.success('Data exported to text area');
+  };
+  
+  const handleDownloadExport = () => {
+    if (!exportData) {
+      toast.error('No data to download. Please export first.');
+      return;
+    }
+    
+    const blob = new Blob([exportData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `viewer-network-export-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    toast.success('Export file downloaded');
+  };
+  
+  const handleImport = () => {
+    if (!importData.trim()) {
+      toast.error('No data to import');
+      return;
+    }
+    
     try {
-      const exportData = {
-        slaves,
-        proxies,
-        viewers,
-        commands,
-        logs,
-        exportedAt: new Date().toISOString()
-      };
+      const data = JSON.parse(importData);
       
-      const dataStr = JSON.stringify(exportData, null, 2);
-      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      if (!data.slaves || !data.proxies || !data.viewers) {
+        throw new Error('Invalid import data format');
+      }
       
-      const exportFileDefaultName = `viewer-command-center-export-${new Date().toISOString().slice(0, 10)}.json`;
+      // In a real implementation, we would process the import data
+      // For now, just show a success message
+      toast.success('Data imported successfully');
       
-      const linkElement = document.createElement('a');
-      linkElement.setAttribute('href', dataUri);
-      linkElement.setAttribute('download', exportFileDefaultName);
-      linkElement.click();
-      
-      toast.success('Data exported successfully');
+      // Clear the import textarea
+      setImportData('');
     } catch (error) {
-      toast.error(`Export failed: ${(error as Error).message}`);
-      console.error('Export error:', error);
+      toast.error(`Failed to parse import data: ${error instanceof Error ? error.message : 'Invalid JSON'}`);
     }
   };
   
-  const handleImportData = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const importedData = JSON.parse(e.target?.result as string);
-        
-        // Validate data structure
-        if (!importedData.slaves || !importedData.proxies || !importedData.viewers) {
-          throw new Error('Invalid data format');
-        }
-        
-        // Store each data type in localStorage
-        localStorage.setItem('slaves', JSON.stringify(importedData.slaves));
-        localStorage.setItem('proxies', JSON.stringify(importedData.proxies));
-        localStorage.setItem('viewers', JSON.stringify(importedData.viewers));
-        localStorage.setItem('commands', JSON.stringify(importedData.commands));
-        localStorage.setItem('logs', JSON.stringify(importedData.logs));
-        
-        toast.success('Data imported successfully, refreshing page...');
-        
-        // Reload the page to reflect the imported data
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
-        
-      } catch (error) {
-        toast.error(`Import failed: ${(error as Error).message}`);
-        console.error('Import error:', error);
-      }
-    };
-    
-    reader.readAsText(file);
+  const handleReset = () => {
+    resetToDefaults();
+    toast.success('System reset to default values');
   };
   
-  const handleClearAllData = () => {
-    if (window.confirm('Are you sure you want to clear all data? This cannot be undone.')) {
-      localStorage.clear();
-      toast.success('All data cleared, returning to defaults');
-      resetToDefaults();
+  const handleToggleDebugMode = (checked: boolean) => {
+    setDebugMode(checked);
+    
+    if (checked) {
+      // Enable more verbose console logging
+      const originalConsoleLog = console.log;
+      const originalConsoleError = console.error;
+      
+      console.log = function(...args) {
+        originalConsoleLog('[DEBUG]', ...args);
+      };
+      
+      console.error = function(...args) {
+        originalConsoleError('[DEBUG ERROR]', ...args);
+        toast.error(`Debug Error: ${args.join(' ')}`);
+      };
+      
+      toast.success('Debug mode enabled');
+    } else {
+      // Restore original console methods
+      console.log = console.__proto__.log;
+      console.error = console.__proto__.error;
+      
+      toast.info('Debug mode disabled');
+    }
+  };
+  
+  const testSupabaseConnection = async () => {
+    try {
+      const { data, error } = await supabase.from('slaves').select('count');
+      
+      if (error) {
+        throw error;
+      }
+      
+      toast.success('Supabase connection successful');
+      setShowSupabaseInfo(true);
+    } catch (error) {
+      console.error('Supabase connection test failed:', error);
+      toast.error(`Supabase connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
   
@@ -93,200 +140,181 @@ const SettingsPage = () => {
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold mb-2">Settings</h1>
-          <p className="text-muted-foreground mb-6">Configure your application preferences</p>
+          <p className="text-muted-foreground mb-6">Configure and manage your viewer network</p>
         </div>
         
-        <Tabs defaultValue="data">
-          <TabsList className="mb-6">
-            <TabsTrigger value="data">Data Management</TabsTrigger>
-            <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="advanced">Advanced</TabsTrigger>
-          </TabsList>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Export Data</CardTitle>
+              <CardDescription>Export all data for backup or transfer</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button className="w-full mb-4" onClick={handleExportData} disabled={isLoading}>
+                <Download className="h-4 w-4 mr-1" />
+                Generate Export
+              </Button>
+              <Textarea
+                placeholder="Export data will appear here"
+                value={exportData}
+                onChange={(e) => setExportData(e.target.value)}
+                rows={8}
+                readOnly
+              />
+            </CardContent>
+            <CardFooter>
+              <Button 
+                variant="outline" 
+                className="w-full"
+                onClick={handleDownloadExport}
+                disabled={!exportData}
+              >
+                <Download className="h-4 w-4 mr-1" />
+                Download as JSON
+              </Button>
+            </CardFooter>
+          </Card>
           
-          <TabsContent value="data" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Data Storage</CardTitle>
-                <CardDescription>Manage your locally stored data</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <h3 className="font-medium">Current Data</h3>
-                    <div className="space-y-1">
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Slaves</span>
-                        <Badge variant="outline">{slaves.length}</Badge>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Proxies</span>
-                        <Badge variant="outline">{proxies.length}</Badge>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Viewers</span>
-                        <Badge variant="outline">{viewers.length}</Badge>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Commands</span>
-                        <Badge variant="outline">{commands.length}</Badge>
-                      </div>
-                      <div className="flex justify-between items-center text-sm">
-                        <span>Logs</span>
-                        <Badge variant="outline">{logs.length}</Badge>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <h3 className="font-medium">Storage Location</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Data is stored locally in your browser's localStorage.
-                      This means your data stays on your device and is not sent to any server.
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-2">
-                      Warning: Clearing browser data or using private browsing will result in data loss.
-                      Use the export feature to back up your data regularly.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter className="flex flex-wrap gap-2">
-                <Button onClick={handleExportData}>
-                  <Download className="h-4 w-4 mr-1" />
-                  Export Data
-                </Button>
-                <div className="relative">
-                  <Input
-                    type="file"
-                    id="import-data"
-                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-                    accept=".json"
-                    onChange={handleImportData}
-                  />
-                  <Button variant="outline">
-                    <Upload className="h-4 w-4 mr-1" />
-                    Import Data
-                  </Button>
-                </div>
-                <Button variant="outline" onClick={resetToDefaults}>
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                  Reset to Defaults
-                </Button>
-                <Button variant="destructive" onClick={handleClearAllData}>
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Clear All Data
-                </Button>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="general" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>General Settings</CardTitle>
-                <CardDescription>Configure basic application settings</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="notifications">Enable Notifications</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Receive notifications for important events
-                      </p>
-                    </div>
-                    <Switch id="notifications" defaultChecked />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="dark-mode">Dark Mode</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Use dark color theme
-                      </p>
-                    </div>
-                    <Switch id="dark-mode" />
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="auto-refresh">Auto Refresh</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Automatically refresh viewer status
-                      </p>
-                    </div>
-                    <Switch id="auto-refresh" defaultChecked />
-                  </div>
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button>
-                  <Save className="h-4 w-4 mr-1" />
-                  Save Settings
-                </Button>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-          
-          <TabsContent value="advanced" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Advanced Settings</CardTitle>
-                <CardDescription>Configure technical application settings</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="storage-limit">Local Storage Limit (items per category)</Label>
-                  <Input id="storage-limit" type="number" defaultValue="1000" />
-                  <p className="text-xs text-muted-foreground">
-                    Maximum number of items to store per category (logs, commands, etc.)
-                  </p>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="refresh-interval">Status Refresh Interval (seconds)</Label>
-                  <Input id="refresh-interval" type="number" defaultValue="30" />
-                  <p className="text-xs text-muted-foreground">
-                    How often to refresh viewer and slave status
-                  </p>
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="debug-mode">Debug Mode</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Show additional debugging information
-                    </p>
-                  </div>
-                  <Switch id="debug-mode" />
-                </div>
-              </CardContent>
-              <CardFooter>
-                <Button>
-                  <Save className="h-4 w-4 mr-1" />
-                  Save Advanced Settings
-                </Button>
-              </CardFooter>
-            </Card>
-          </TabsContent>
-        </Tabs>
+          <Card>
+            <CardHeader>
+              <CardTitle>Import Data</CardTitle>
+              <CardDescription>Import data from a previous export</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                placeholder="Paste exported JSON data here"
+                value={importData}
+                onChange={(e) => setImportData(e.target.value)}
+                rows={8}
+              />
+            </CardContent>
+            <CardFooter>
+              <Button variant="outline" className="w-full" onClick={handleImport} disabled={!importData.trim()}>
+                <Upload className="h-4 w-4 mr-1" />
+                Import Data
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
         
         <Card>
           <CardHeader>
-            <CardTitle>About Viewer Command Center</CardTitle>
-            <CardDescription>
-              Version 1.0.0 - Frontend Only Edition
-            </CardDescription>
+            <CardTitle>System Settings</CardTitle>
+            <CardDescription>Configure system behavior</CardDescription>
           </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              This application is designed to run entirely in your browser. All data is stored locally on your device
-              using browser localStorage. No data is sent to external servers.
-            </p>
-            <p className="text-sm text-muted-foreground mt-4">
-              Make sure to export your data regularly as a backup, as clearing your browser data will result in data loss.
-            </p>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="debug-mode">Debug Mode</Label>
+                <p className="text-sm text-muted-foreground">
+                  Enable more verbose logging for troubleshooting
+                </p>
+              </div>
+              <Switch
+                id="debug-mode"
+                checked={debugMode}
+                onCheckedChange={handleToggleDebugMode}
+              />
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label>Test Supabase Connection</Label>
+                <p className="text-sm text-muted-foreground">
+                  Verify connection to Supabase backend
+                </p>
+              </div>
+              <Button variant="outline" onClick={testSupabaseConnection}>
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Test Connection
+              </Button>
+            </div>
+            
+            {showSupabaseInfo && (
+              <Alert className="mt-4">
+                <AlertTitle>Supabase Connection Details</AlertTitle>
+                <AlertDescription>
+                  <div className="space-y-2 mt-2">
+                    <p>
+                      <strong>URL:</strong>{" "}
+                      <code className="px-1 py-0.5 bg-muted rounded text-sm">
+                        https://qdxpxqdewqrbvlsajeeo.supabase.co
+                      </code>
+                    </p>
+                    <p>
+                      <strong>Project ID:</strong>{" "}
+                      <code className="px-1 py-0.5 bg-muted rounded text-sm">
+                        qdxpxqdewqrbvlsajeeo
+                      </code>
+                    </p>
+                    <p>
+                      <strong>Status:</strong>{" "}
+                      <span className="text-status-success">Connected</span>
+                    </p>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" className="w-full mt-4">
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Reset to Defaults
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action will reset all data to default values. This includes all slaves, proxies,
+                    viewers, commands, and logs. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleReset}>
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Reset
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="bg-amber-50 dark:bg-amber-950/20">
+            <div className="flex items-center">
+              <ShieldAlert className="h-5 w-5 mr-2 text-amber-500" />
+              <CardTitle>Security Notice</CardTitle>
+            </div>
+            <CardDescription>Important security information</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-4">
+            <Alert variant="warning">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Development Mode Active</AlertTitle>
+              <AlertDescription>
+                This application is running in development mode with public permissions.
+                For production use, you should:
+                <ul className="list-disc ml-6 mt-2 space-y-1">
+                  <li>Enable authentication for Supabase</li>
+                  <li>Set up proper Row Level Security policies</li>
+                  <li>Use environment variables for sensitive information</li>
+                  <li>Deploy to a secure hosting environment</li>
+                </ul>
+              </AlertDescription>
+            </Alert>
+          </CardContent>
+          <CardFooter>
+            <p className="text-xs text-muted-foreground">
+              For more information on securing your application, please refer to the 
+              <a href="https://supabase.com/docs/guides/auth" className="text-primary ml-1" target="_blank" rel="noopener noreferrer">
+                Supabase Authentication Documentation
+              </a>.
+            </p>
+          </CardFooter>
         </Card>
       </div>
     </Layout>

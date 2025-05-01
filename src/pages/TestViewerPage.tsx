@@ -7,14 +7,18 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ViewerInstance } from '@/types';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ViewerInstance, Proxy } from '@/types';
 import { useApp } from '@/context/AppContext';
-import { PlayCircle, Plus, Minus, StopCircle, Loader2 } from 'lucide-react';
+import { PlayCircle, Plus, Minus, StopCircle, Loader2, Trash2, RefreshCw } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from '@/components/ui/sonner';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const TestViewerPage = () => {
   const { addViewer, removeViewer, updateViewer, viewers, proxies, isLoading } = useApp();
   const [url, setUrl] = useState('https://twitch.tv/');
+  const [selectedProxyId, setSelectedProxyId] = useState<string>('');
   const [logs, setLogs] = useState<string[]>(() => {
     try {
       const savedLogs = localStorage.getItem('viewerTestLogs');
@@ -24,8 +28,11 @@ const TestViewerPage = () => {
       return [];
     }
   });
+  const [isTesting, setIsTesting] = useState(false);
+  const [count, setCount] = useState(1);
   
   const localViewers = viewers.filter(v => !v.slaveId);
+  const validProxies = proxies.filter(p => p.valid);
   
   // Save logs to localStorage when they change
   useEffect(() => {
@@ -36,54 +43,119 @@ const TestViewerPage = () => {
     setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${message}`, ...prev]);
   };
   
-  const handleSpawnViewer = (count: number = 1) => {
+  const getSelectedProxy = (): Proxy | undefined => {
+    if (selectedProxyId) {
+      return proxies.find(p => p.id === selectedProxyId);
+    }
+    return undefined;
+  };
+  
+  const handleSpawnViewer = async (count: number = 1) => {
     if (!url.trim() || !url.includes('twitch.tv')) {
+      toast.error('Please enter a valid Twitch URL');
       addLog('Error: Please enter a valid Twitch URL');
       return;
     }
     
-    for (let i = 0; i < count; i++) {
-      const randomProxy = proxies.filter(p => p.valid)[Math.floor(Math.random() * proxies.filter(p => p.valid).length)];
-      const proxyString = randomProxy ? 
-        `${randomProxy.address}:${randomProxy.port}${randomProxy.username ? `:${randomProxy.username}:${randomProxy.password}` : ''}` : 
-        undefined;
-      
-      const viewer: ViewerInstance = {
-        id: `local-${Date.now()}-${i}`,
-        url,
-        proxy: proxyString,
-        status: 'running',
-        startTime: new Date().toISOString(),
-      };
-      
-      addViewer(viewer);
-      addLog(`Spawned viewer for ${url} ${proxyString ? `with proxy ${proxyString}` : 'without proxy'}`);
-      
-      // Simulate some random errors occasionally
-      if (Math.random() < 0.2) {
-        setTimeout(() => {
-          updateViewer(viewer.id, { status: 'error', error: 'Connection refused' });
-          addLog(`Error: Failed to connect to ${url} (Connection refused)`);
-        }, Math.random() * 5000 + 1000);
+    setIsTesting(true);
+    
+    try {
+      for (let i = 0; i < count; i++) {
+        let proxyString: string | undefined = undefined;
+        let proxyToUse: Proxy | undefined = undefined;
+        
+        if (selectedProxyId) {
+          proxyToUse = getSelectedProxy();
+        } else if (validProxies.length > 0) {
+          // Choose a random proxy if none selected
+          proxyToUse = validProxies[Math.floor(Math.random() * validProxies.length)];
+        }
+        
+        if (proxyToUse) {
+          proxyString = proxyToUse.username && proxyToUse.password ? 
+            `${proxyToUse.address}:${proxyToUse.port}:${proxyToUse.username}:${proxyToUse.password}` : 
+            `${proxyToUse.address}:${proxyToUse.port}`;
+        }
+        
+        const viewer: ViewerInstance = {
+          id: `local-${Date.now()}-${i}`,
+          url,
+          proxy: proxyString,
+          status: 'running',
+          startTime: new Date().toISOString(),
+        };
+        
+        await addViewer(viewer);
+        
+        addLog(`Spawned viewer for ${url} ${proxyToUse ? `with proxy ${proxyToUse.address}:${proxyToUse.port}` : 'without proxy'}`);
+        
+        // Simulate random outcomes for testing
+        simulateViewerOutcome(viewer.id);
       }
+    } catch (error) {
+      console.error('Error spawning viewers:', error);
+      toast.error('Failed to spawn viewers');
+      addLog(`Error: Failed to spawn viewers - ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsTesting(false);
     }
   };
   
-  const handleStopAll = () => {
-    localViewers.forEach(viewer => {
-      removeViewer(viewer.id);
-    });
-    addLog(`Stopped all viewers`);
+  const simulateViewerOutcome = (viewerId: string) => {
+    // Simulate some random outcomes for testing
+    setTimeout(() => {
+      const outcome = Math.random();
+      
+      if (outcome < 0.1) {
+        // 10% chance of error
+        updateViewer(viewerId, { status: 'error', error: 'Connection refused' });
+        addLog(`Error: Failed to connect to ${url} (Connection refused)`);
+        toast.error(`Viewer connection failed: Connection refused`);
+      } else if (outcome < 0.2) {
+        // 10% chance of authentication error
+        updateViewer(viewerId, { status: 'error', error: 'Authentication failed' });
+        addLog(`Error: Authentication failed for ${url}`);
+        toast.error(`Viewer authentication failed`);
+      } else if (outcome < 0.3) {
+        // 10% chance of timeout
+        updateViewer(viewerId, { status: 'error', error: 'Connection timeout' });
+        addLog(`Error: Timeout connecting to ${url}`);
+        toast.error(`Viewer connection timeout`);
+      }
+      // The other 70% remain in 'running' status
+    }, Math.random() * 5000 + 2000); // Random delay between 2-7 seconds
   };
   
-  const handleRemoveViewer = (id: string) => {
-    removeViewer(id);
-    addLog(`Stopped viewer instance`);
+  const handleStopAll = async () => {
+    setIsTesting(true);
+    try {
+      for (const viewer of localViewers) {
+        await removeViewer(viewer.id);
+      }
+      addLog(`Stopped all viewers`);
+      toast.success('All viewers stopped');
+    } catch (error) {
+      console.error('Error stopping viewers:', error);
+      toast.error('Failed to stop all viewers');
+    } finally {
+      setIsTesting(false);
+    }
+  };
+  
+  const handleRemoveViewer = async (id: string) => {
+    try {
+      await removeViewer(id);
+      addLog(`Stopped viewer instance`);
+    } catch (error) {
+      console.error('Error removing viewer:', error);
+      toast.error('Failed to stop viewer');
+    }
   };
   
   const handleClearLogs = () => {
     setLogs([]);
     addLog('Logs cleared');
+    toast.success('Logs cleared');
   };
   
   if (isLoading) {
@@ -114,6 +186,15 @@ const TestViewerPage = () => {
           <p className="text-muted-foreground mb-6">Run local tests for your viewers</p>
         </div>
         
+        {proxies.length === 0 && (
+          <Alert variant="warning">
+            <AlertTitle>No proxies available</AlertTitle>
+            <AlertDescription>
+              You need to add proxies before testing viewers. Go to the Proxies page to add some.
+            </AlertDescription>
+          </Alert>
+        )}
+        
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
@@ -130,25 +211,79 @@ const TestViewerPage = () => {
                 />
               </div>
               
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={() => handleSpawnViewer(1)}>
-                  <PlayCircle className="h-4 w-4 mr-1" />
-                  Spawn 1 Viewer
-                </Button>
-                
-                <Button variant="outline" onClick={() => handleSpawnViewer(3)}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add 3 Viewers
-                </Button>
-                
-                <Button variant="outline" onClick={() => handleSpawnViewer(5)}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Add 5 Viewers
+              <div className="space-y-2">
+                <Label htmlFor="proxy">Proxy (Optional)</Label>
+                <Select value={selectedProxyId} onValueChange={setSelectedProxyId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a proxy or use random" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Random Valid Proxy</SelectItem>
+                    <SelectItem value="none">No Proxy</SelectItem>
+                    {validProxies.map((proxy) => (
+                      <SelectItem key={proxy.id} value={proxy.id}>
+                        {proxy.address}:{proxy.port}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="count">Viewer Count</Label>
+                <div className="flex items-center">
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={() => setCount(c => Math.max(1, c - 1))}
+                    disabled={count <= 1}
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <Input
+                    id="count"
+                    type="number"
+                    min={1}
+                    max={25}
+                    value={count}
+                    onChange={(e) => setCount(parseInt(e.target.value) || 1)}
+                    className="mx-2 text-center"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="icon" 
+                    onClick={() => setCount(c => Math.min(25, c + 1))}
+                    disabled={count >= 25}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              
+              <div className="flex flex-wrap gap-2 pt-2">
+                <Button 
+                  onClick={() => handleSpawnViewer(count)} 
+                  disabled={isTesting}
+                >
+                  {isTesting ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <PlayCircle className="h-4 w-4 mr-1" />
+                  )}
+                  Spawn Viewers
                 </Button>
                 
                 {localViewers.length > 0 && (
-                  <Button variant="destructive" onClick={handleStopAll}>
-                    <StopCircle className="h-4 w-4 mr-1" />
+                  <Button 
+                    variant="destructive" 
+                    onClick={handleStopAll}
+                    disabled={isTesting}
+                  >
+                    {isTesting ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <StopCircle className="h-4 w-4 mr-1" />
+                    )}
                     Stop All
                   </Button>
                 )}
@@ -168,6 +303,7 @@ const TestViewerPage = () => {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Viewer Logs</CardTitle>
               <Button variant="outline" size="sm" onClick={handleClearLogs}>
+                <Trash2 className="h-4 w-4 mr-1" />
                 Clear Logs
               </Button>
             </CardHeader>
@@ -192,8 +328,29 @@ const TestViewerPage = () => {
         </div>
         
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Active Local Viewers</CardTitle>
+            {localViewers.length > 0 && (
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={() => {
+                  // Simulate status refresh by updating all viewers with a random delay
+                  localViewers.forEach((viewer, index) => {
+                    if (viewer.status === 'running') {
+                      setTimeout(() => {
+                        // Generate a random CPU/RAM usage
+                        addLog(`Refreshed status for viewer ${viewer.id}`);
+                      }, index * 300);
+                    }
+                  });
+                  toast.success('Refreshed viewer statuses');
+                }}
+              >
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Refresh Status
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
             {localViewers.length === 0 ? (
@@ -218,6 +375,9 @@ const TestViewerPage = () => {
                         <div className="flex items-center gap-2">
                           <span className={`status-dot ${viewer.status === 'running' ? 'success' : viewer.status === 'stopped' ? 'warning' : 'danger'}`} />
                           <span className="capitalize">{viewer.status}</span>
+                          {viewer.status === 'error' && (
+                            <span className="text-xs text-red-500">{viewer.error}</span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>{viewer.url}</TableCell>
