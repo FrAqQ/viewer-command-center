@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { useApp } from '@/context/AppContext';
@@ -113,10 +112,11 @@ const LogsPage = () => {
     }
   };
   
+  // Update the variant selection to match allowed variants
   const getLevelBadgeVariant = (level: string) => {
     switch (level) {
       case 'error': return 'destructive';
-      case 'warning': return 'warning';
+      case 'warning': return 'secondary';
       case 'info': return 'secondary';
       default: return 'outline';
     }

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -187,7 +186,7 @@ const TestViewerPage = () => {
         </div>
         
         {proxies.length === 0 && (
-          <Alert variant="warning">
+          <Alert>
             <AlertTitle>No proxies available</AlertTitle>
             <AlertDescription>
               You need to add proxies before testing viewers. Go to the Proxies page to add some.

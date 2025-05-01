@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -112,8 +111,8 @@ const SettingsPage = () => {
       toast.success('Debug mode enabled');
     } else {
       // Restore original console methods
-      console.log = console.__proto__.log;
-      console.error = console.__proto__.error;
+      console.log = originalConsoleLog;
+      console.error = originalConsoleError;
       
       toast.info('Debug mode disabled');
     }
@@ -292,7 +291,7 @@ const SettingsPage = () => {
             <CardDescription>Important security information</CardDescription>
           </CardHeader>
           <CardContent className="pt-4">
-            <Alert variant="warning">
+            <Alert>
               <AlertTriangle className="h-4 w-4" />
               <AlertTitle>Development Mode Active</AlertTitle>
               <AlertDescription>

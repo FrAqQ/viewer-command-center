@@ -1,8 +1,7 @@
-
 import React, { useState } from 'react';
 import Layout from '@/components/Layout';
 import { useApp } from '@/context/AppContext';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Command, SlaveServer } from '@/types';
@@ -46,8 +45,8 @@ const CommandsPage = () => {
   
   const getStatusBadgeVariant = (status: string) => {
     switch (status) {
-      case 'pending': return 'warning';
-      case 'executed': return 'success';
+      case 'pending': return 'secondary';
+      case 'executed': return 'secondary';
       case 'failed': return 'destructive';
       default: return 'secondary';
     }
