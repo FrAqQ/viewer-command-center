@@ -2,15 +2,30 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+// CORS headers for allowing cross-origin requests from slave servers
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS'
+}
+
 serve(async (req) => {
+  // Handle CORS preflight requests
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders
+    })
+  }
+
   try {
     const url = Deno.env.get('SUPABASE_URL') || ''
     const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
     
-    // Erstelle einen Supabase-Client mit der Service-Role für Administratorzugriff
+    // Create a Supabase client with the service role for admin access
     const supabase = createClient(url, key)
     
-    // Extrahiere die Anforderungsdaten
+    // Extract the request data
     const data = await req.json()
     const action = data.action
     
@@ -18,7 +33,7 @@ serve(async (req) => {
     
     switch (action) {
       case 'register':
-        // Registriere einen neuen Slave oder aktualisiere einen vorhandenen
+        // Register a new slave or update an existing one
         const slave = data.slave
         if (!slave || !slave.hostname) {
           throw new Error('Invalid slave data')
@@ -31,7 +46,7 @@ serve(async (req) => {
             name: slave.name,
             hostname: slave.hostname,
             ip: slave.ip,
-            status: 'online',
+            status: slave.status,
             last_seen: new Date().toISOString(),
             cpu: slave.metrics?.cpu || 0,
             ram: slave.metrics?.ram || 0,
@@ -41,54 +56,84 @@ serve(async (req) => {
           .single()
         
         if (slaveError) throw slaveError
+        
+        // Log the successful registration
+        await supabase
+          .from('logs')
+          .insert({
+            level: 'info',
+            source: slave.hostname,
+            message: `Slave server registered/updated: ${slave.name}`,
+            details: { hostname: slave.hostname, ip: slave.ip }
+          })
+        
         result = { success: true, slave: slaveData }
         break
         
       case 'update':
-        // Aktualisiere Slave-Metriken
+        // Update slave metrics
         const metrics = data.metrics
         const slaveId = data.slaveId
+        const hostname = data.hostname
         
-        if (!slaveId) {
-          throw new Error('Missing slave ID')
+        if (!slaveId && !hostname) {
+          throw new Error('Missing slave ID or hostname')
         }
         
-        const { data: updateData, error: updateError } = await supabase
+        let updateQuery = supabase
           .from('slaves')
           .update({
             last_seen: new Date().toISOString(),
             cpu: metrics?.cpu,
             ram: metrics?.ram,
-            instances: metrics?.instances
-          })
-          .eq('id', slaveId)
+            instances: metrics?.instances,
+            status: 'online' // Always set to online when updating
+          });
+        
+        // Query by ID if provided, otherwise by hostname
+        if (slaveId) {
+          updateQuery = updateQuery.eq('id', slaveId);
+        } else {
+          updateQuery = updateQuery.eq('hostname', hostname);
+        }
+        
+        const { data: updateData, error: updateError } = await updateQuery
           .select()
-          .single()
+          .single();
         
         if (updateError) throw updateError
         result = { success: true, slave: updateData }
         break
         
       case 'fetch_commands':
-        // Hole ausstehende Befehle für einen Slave ab
-        const targetId = data.slaveId || data.hostname
+        // Fetch pending commands for a slave
+        const targetId = data.slaveId
+        const targetHostname = data.hostname
         
-        if (!targetId) {
+        if (!targetId && !targetHostname) {
           throw new Error('Missing slave ID or hostname')
         }
         
-        const { data: commandData, error: commandError } = await supabase
+        let commandQuery = supabase
           .from('commands')
           .select('*')
-          .or(`target.eq.${targetId},target.eq.all`)
-          .eq('status', 'pending')
+          .eq('status', 'pending');
+        
+        // Add condition for target (by ID, hostname, or 'all')
+        if (targetId) {
+          commandQuery = commandQuery.or(`target.eq.${targetId},target.eq.all`);
+        } else if (targetHostname) {
+          commandQuery = commandQuery.or(`target.eq.${targetHostname},target.eq.all`);
+        }
+        
+        const { data: commandData, error: commandError } = await commandQuery;
         
         if (commandError) throw commandError
         result = { success: true, commands: commandData || [] }
         break
         
       case 'update_command':
-        // Aktualisiere den Status eines Befehls
+        // Update the status of a command
         const commandId = data.commandId
         const status = data.status
         const payload = data.payload
@@ -108,11 +153,22 @@ serve(async (req) => {
           .single()
         
         if (cmdUpdateError) throw cmdUpdateError
+        
+        // Log the command status update
+        await supabase
+          .from('logs')
+          .insert({
+            level: status === 'executed' ? 'info' : 'error',
+            source: 'Command Processor',
+            message: `Command ${commandId} ${status}`,
+            details: { commandId, payload }
+          })
+        
         result = { success: true, command: cmdUpdateData }
         break
         
       case 'add_log':
-        // Füge einen neuen Log-Eintrag hinzu
+        // Add a new log entry
         const log = data.log
         
         if (!log || !log.level || !log.message) {
@@ -135,28 +191,120 @@ serve(async (req) => {
         break
       
       case 'update_viewer':
-        // Aktualisiere den Status einer Viewer-Instanz
+        // Update the status of a viewer instance
         const viewerId = data.viewerId
         const viewerStatus = data.status
         const error = data.error
+        const url = data.url
+        const slaveHostname = data.slaveHostname
         
-        if (!viewerId || !viewerStatus) {
-          throw new Error('Missing viewer ID or status')
+        // Find the slave ID if hostname is provided
+        let slaveHostnameId = null
+        if (slaveHostname && !data.slaveId) {
+          const { data: slaveByHostname } = await supabase
+            .from('slaves')
+            .select('id')
+            .eq('hostname', slaveHostname)
+            .single();
+          
+          if (slaveByHostname) {
+            slaveHostnameId = slaveByHostname.id;
+          }
         }
         
-        const { data: viewerUpdateData, error: viewerUpdateError } = await supabase
-          .from('viewers')
-          .update({
-            status: viewerStatus,
-            error: error || null
-          })
-          .eq('id', viewerId)
-          .select()
-          .single()
-        
-        if (viewerUpdateError) throw viewerUpdateError
-        result = { success: true, viewer: viewerUpdateData }
+        if (viewerId) {
+          // Update existing viewer
+          if (!viewerStatus) {
+            throw new Error('Missing viewer status')
+          }
+          
+          const { data: viewerUpdateData, error: viewerUpdateError } = await supabase
+            .from('viewers')
+            .update({
+              status: viewerStatus,
+              error: error || null,
+              slave_id: data.slaveId || slaveHostnameId || undefined
+            })
+            .eq('id', viewerId)
+            .select()
+            .single()
+          
+          if (viewerUpdateError) throw viewerUpdateError
+          result = { success: true, viewer: viewerUpdateData }
+        } else if (url) {
+          // Create new viewer instance
+          const { data: newViewer, error: newViewerError } = await supabase
+            .from('viewers')
+            .insert({
+              url,
+              slave_id: data.slaveId || slaveHostnameId || undefined,
+              status: viewerStatus || 'running',
+              error: error || null,
+              proxy_id: data.proxyId || null
+            })
+            .select()
+            .single()
+          
+          if (newViewerError) throw newViewerError
+          
+          // Log the new viewer
+          await supabase
+            .from('logs')
+            .insert({
+              level: 'info',
+              source: slaveHostname || 'Slave',
+              message: `New viewer started for ${url}`,
+              details: { viewerId: newViewer.id }
+            })
+          
+          result = { success: true, viewer: newViewer }
+        } else {
+          throw new Error('Either viewerId or url must be provided')
+        }
         break
+
+      case 'check_proxy':
+        // Update proxy validity status
+        const proxyId = data.proxyId
+        const proxyValid = data.valid === true
+        const proxyAddress = data.address
+        const proxyPort = data.port
+        
+        let proxyQuery = supabase.from('proxies');
+        
+        if (proxyId) {
+          // Update existing proxy
+          const { data: proxyData, error: proxyError } = await proxyQuery
+            .update({
+              valid: proxyValid,
+              last_checked: new Date().toISOString(),
+              fail_count: proxyValid ? 0 : supabase.rpc('increment_fail_count', { proxy_id: proxyId })
+            })
+            .eq('id', proxyId)
+            .select()
+            .single();
+          
+          if (proxyError) throw proxyError
+          result = { success: true, proxy: proxyData }
+        } else if (proxyAddress && proxyPort) {
+          // Find by address and port
+          const { data: proxyData, error: proxyError } = await proxyQuery
+            .update({
+              valid: proxyValid,
+              last_checked: new Date().toISOString(),
+              fail_count: proxyValid ? 0 : supabase.rpc('increment_fail_count', { address: proxyAddress, port: proxyPort })
+            })
+            .eq('address', proxyAddress)
+            .eq('port', proxyPort)
+            .select()
+            .single();
+          
+          if (proxyError) throw proxyError
+          result = { success: true, proxy: proxyData }
+        } else {
+          throw new Error('Either proxyId or address+port must be provided')
+        }
+        break;
         
       default:
         throw new Error(`Unknown action: ${action}`)
@@ -165,19 +313,39 @@ serve(async (req) => {
     return new Response(
       JSON.stringify(result),
       {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200
       }
     )
   } catch (error) {
     console.error('Error in slave webhook:', error.message)
+    
+    // Try to log the error to the database
+    try {
+      const url = Deno.env.get('SUPABASE_URL') || ''
+      const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+      const supabase = createClient(url, key)
+      
+      await supabase
+        .from('logs')
+        .insert({
+          level: 'error',
+          source: 'Webhook',
+          message: `Error in slave webhook: ${error.message}`,
+          details: { error: error.message }
+        })
+    } catch (logError) {
+      // Silently fail if logging to database fails
+      console.error('Failed to log error to database:', logError)
+    }
+    
     return new Response(
       JSON.stringify({
         success: false,
         error: error.message
       }),
       {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500
       }
     )

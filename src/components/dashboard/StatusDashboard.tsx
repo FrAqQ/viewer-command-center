@@ -13,22 +13,36 @@ const StatusDashboard = () => {
   const validProxies = proxies.filter(proxy => proxy.valid).length;
   const errors = logs.filter(log => log.level === 'error').length;
 
-  // Berechnung der Trends
+  // Calculate trends based on last hour data (simulated in demo)
   const [trends, setTrends] = useState({
     slaves: { value: 0, positive: true },
     viewers: { value: 0, positive: true },
     proxies: { value: 0, positive: true }
   });
 
-  // Simulierte Trend-Berechnung (in einer realen App würde dies durch historische Daten ersetzt)
   useEffect(() => {
-    // Hier könnte man historische Daten aus Supabase abrufen
+    // In a real app, we would calculate trends based on historical data from Supabase
+    // For now, we'll use simulated trend data
+    const calculateTrend = (current: number, total: number) => {
+      if (total === 0) return { value: 0, positive: true };
+      
+      // Generate a pseudo-random trend for demo purposes
+      // In reality, this would compare current values to historical data
+      const trendValue = Math.floor(Math.random() * 20);
+      
+      // Determine if the trend is positive based on the ratio of active items
+      const ratio = current / total;
+      const isPositive = ratio > 0.5;
+      
+      return { value: trendValue, positive: isPositive };
+    };
+    
     setTrends({
-      slaves: { value: Math.floor(Math.random() * 20), positive: activeSlaves > 0 },
-      viewers: { value: Math.floor(Math.random() * 30), positive: activeViewers > 0 },
-      proxies: { value: Math.floor(Math.random() * 10), positive: validProxies > proxies.length / 2 }
+      slaves: calculateTrend(activeSlaves, slaves.length),
+      viewers: calculateTrend(activeViewers, viewers.length),
+      proxies: calculateTrend(validProxies, proxies.length)
     });
-  }, [activeSlaves, activeViewers, validProxies, proxies.length]);
+  }, [activeSlaves, activeViewers, validProxies, slaves.length, viewers.length, proxies.length]);
 
   if (isLoading) {
     return (
@@ -52,7 +66,7 @@ const StatusDashboard = () => {
       />
       <StatsCard 
         title="Active Viewers" 
-        value={activeViewers} 
+        value={`${activeViewers}/${viewers.length}`} 
         icon={<Monitor className="h-4 w-4" />} 
         description="Running viewer instances"
         trend={trends.viewers}
