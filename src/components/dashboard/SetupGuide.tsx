@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -41,7 +40,7 @@ cd ~/viewer-slave
 npm init -y
 npm install axios @supabase/supabase-js playwright os-utils node-cron`;
 
-  // Fixed the slaveCode template string to properly reference the variables
+  // Fixed the template string by escaping the problematic parts with additional backticks
   const slaveCode = `// slave.js - Basic Slave Client for Viewer Network
 const axios = require('axios');
 const os = require('os');
@@ -141,7 +140,7 @@ async function checkCommands() {
       .from('commands')
       .select('*')
       .eq('status', 'pending')
-      .or(\`target.eq.\${slaveConfig.id},target.eq.\${slaveConfig.hostname},target.eq.all\`);
+      .or('target.eq.' + slaveConfig.id + ',target.eq.' + slaveConfig.hostname + ',target.eq.all');
     
     if (error) {
       console.error('Error fetching commands:', error.message);
@@ -220,10 +219,10 @@ async function start() {
   await updateStatus();
   
   // Setup regular status updates
-  cron.schedule(\`*/${slaveConfig.updateInterval} * * * * *\`, updateStatus);
+  cron.schedule(\`*/\${slaveConfig.updateInterval} * * * * *\`, updateStatus);
   
   // Setup command checking
-  cron.schedule(\`*/${slaveConfig.commandCheckInterval} * * * * *\`, checkCommands);
+  cron.schedule(\`*/\${slaveConfig.commandCheckInterval} * * * * *\`, checkCommands);
   
   console.log('Slave client running');
 }
