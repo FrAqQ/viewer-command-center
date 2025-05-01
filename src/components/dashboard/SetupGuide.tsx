@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -375,7 +374,7 @@ pm2 save
               </div>
               
               <p className="text-sm text-muted-foreground mt-4">
-                <strong>Important:</strong> Make sure to modify the <code className="bg-muted p-1 rounded">config.name</code> value 
+                <strong>Important:</strong> Make sure to modify the <code className="bg-muted p-1 rounded">slaveConfig.name</code> value 
                 to a unique name for your slave server.
               </p>
             </div>
