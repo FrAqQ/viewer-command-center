@@ -49,7 +49,7 @@ const cron = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 
 // Configuration
-const config = {
+const slaveConfig = {
   name: 'Slave-01', // Change this to your slave name
   hostname: os.hostname(),
   ip: '0.0.0.0', // Will be updated on start
@@ -61,7 +61,7 @@ const config = {
 };
 
 // Initialize Supabase client
-const supabase = createClient(config.supabaseUrl, config.supabaseKey);
+const supabase = createClient(slaveConfig.supabaseUrl, slaveConfig.supabaseKey);
 
 // Get public IP address
 async function getPublicIp() {
@@ -96,7 +96,7 @@ async function updateStatus() {
     const { data: viewersData, error: viewersError } = await supabase
       .from('viewers')
       .select('count')
-      .eq('slave_id', config.id)
+      .eq('slave_id', slaveConfig.id)
       .eq('status', 'running');
       
     if (!viewersError && viewersData) {
@@ -104,15 +104,15 @@ async function updateStatus() {
     }
     
     const payload = {
-      name: config.name,
-      hostname: config.hostname,
-      ip: config.ip,
-      id: config.id, // If we have an ID from Supabase
+      name: slaveConfig.name,
+      hostname: slaveConfig.hostname,
+      ip: slaveConfig.ip,
+      id: slaveConfig.id, // If we have an ID from Supabase
       status: 'online',
       metrics
     };
     
-    const response = await axios.post(config.webhookUrl, payload, {
+    const response = await axios.post(slaveConfig.webhookUrl, payload, {
       headers: {
         'Content-Type': 'application/json'
       }
@@ -120,8 +120,8 @@ async function updateStatus() {
     
     if (response.data && response.data.id) {
       // Store the slave ID returned by Supabase
-      config.id = response.data.id;
-      console.log(\`Status updated successfully. Slave ID: \${config.id}\`);
+      slaveConfig.id = response.data.id;
+      console.log(\`Status updated successfully. Slave ID: \${slaveConfig.id}\`);
     } else {
       console.log('Status updated successfully');
     }
@@ -132,7 +132,7 @@ async function updateStatus() {
 
 // Check for pending commands
 async function checkCommands() {
-  if (!config.id) return; // Skip if we don't have an ID yet
+  if (!slaveConfig.id) return; // Skip if we don't have an ID yet
   
   try {
     // Get pending commands for this slave
@@ -140,7 +140,7 @@ async function checkCommands() {
       .from('commands')
       .select('*')
       .eq('status', 'pending')
-      .or(\`target.eq.\${config.id},target.eq.\${config.hostname},target.eq.all\`);
+      .or(\`target.eq.\${slaveConfig.id},target.eq.\${slaveConfig.hostname},target.eq.all\`);
     
     if (error) {
       console.error('Error fetching commands:', error.message);
@@ -195,7 +195,7 @@ async function checkCommands() {
         .from('logs')
         .insert({
           level: 'info',
-          source: config.hostname,
+          source: slaveConfig.hostname,
           message: \`Command \${command.type} executed\`,
           details: { commandId: command.id, payload: command.payload }
         });
@@ -209,20 +209,20 @@ async function checkCommands() {
 // Startup sequence
 async function start() {
   console.log('Slave client starting...');
-  console.log(\`Hostname: \${config.hostname}\`);
+  console.log(\`Hostname: \${slaveConfig.hostname}\`);
   
   // Get public IP
-  config.ip = await getPublicIp();
-  console.log(\`Public IP: \${config.ip}\`);
+  slaveConfig.ip = await getPublicIp();
+  console.log(\`Public IP: \${slaveConfig.ip}\`);
   
   // Send initial status update
   await updateStatus();
   
   // Setup regular status updates
-  cron.schedule(\`*/${config.updateInterval} * * * * *\`, updateStatus);
+  cron.schedule(\`*/${slaveConfig.updateInterval} * * * * *\`, updateStatus);
   
   // Setup command checking
-  cron.schedule(\`*/${config.commandCheckInterval} * * * * *\`, checkCommands);
+  cron.schedule(\`*/${slaveConfig.commandCheckInterval} * * * * *\`, checkCommands);
   
   console.log('Slave client running');
 }

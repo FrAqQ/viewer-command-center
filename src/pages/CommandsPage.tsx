@@ -508,7 +508,7 @@ const CommandTable: React.FC<CommandTableProps> = ({ commands, slaves }) => {
               <TableCell className="font-medium capitalize">{command.type}</TableCell>
               <TableCell>{getTargetName(command.target)}</TableCell>
               <TableCell>
-                <Badge variant={command.status === 'pending' ? 'warning' : command.status === 'executed' ? 'success' : 'destructive'}>
+                <Badge variant={command.status === 'pending' ? 'secondary' : command.status === 'executed' ? 'secondary' : 'destructive'}>
                   {command.status}
                 </Badge>
               </TableCell>

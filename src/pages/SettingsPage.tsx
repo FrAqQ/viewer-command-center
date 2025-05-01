@@ -28,6 +28,9 @@ const SettingsPage = () => {
   const [exportData, setExportData] = useState('');
   const [importData, setImportData] = useState('');
   const [showSupabaseInfo, setShowSupabaseInfo] = useState(false);
+  // Store the original console methods as references
+  const [originalConsoleLog] = useState(() => console.log);
+  const [originalConsoleError] = useState(() => console.error);
   
   const handleExportData = () => {
     const data = {
