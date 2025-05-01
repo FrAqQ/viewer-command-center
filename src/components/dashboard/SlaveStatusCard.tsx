@@ -4,7 +4,7 @@ import { SlaveServer } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Power, Server } from 'lucide-react';
 
 interface SlaveStatusCardProps {
   slave: SlaveServer;
@@ -15,6 +15,20 @@ const SlaveStatusCard: React.FC<SlaveStatusCardProps> = ({ slave, onReconnect })
   const statusColor = 
     slave.status === 'online' ? 'success' :
     slave.status === 'error' ? 'danger' : 'warning';
+
+  // CPU-Status Farbe basierend auf Auslastung
+  const getCpuStatusColor = (value: number) => {
+    if (value > 80) return 'bg-status-danger';
+    if (value > 50) return 'bg-status-warning';
+    return 'bg-status-success';
+  };
+  
+  // RAM-Status Farbe basierend auf Auslastung
+  const getRamStatusColor = (value: number) => {
+    if (value > 80) return 'bg-status-danger';
+    if (value > 50) return 'bg-status-warning';
+    return 'bg-status-success';
+  };
     
   const formatLastSeen = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -45,14 +59,28 @@ const SlaveStatusCard: React.FC<SlaveStatusCardProps> = ({ slave, onReconnect })
             {slave.hostname} ({slave.ip})
           </CardDescription>
         </div>
-        <Button 
-          size="sm" 
-          variant="outline" 
-          className="h-8 w-8 p-0" 
-          onClick={() => onReconnect(slave.id)}
-        >
-          <RefreshCw className="h-4 w-4" />
-        </Button>
+        <div className="flex space-x-1">
+          {slave.status !== 'online' ? (
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="h-8 w-8 p-0" 
+              onClick={() => onReconnect(slave.id)}
+              title="Reconnect"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button 
+              size="sm" 
+              variant="outline" 
+              className="h-8 w-8 p-0" 
+              title="Server Online"
+            >
+              <Server className="h-4 w-4 text-status-success" />
+            </Button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="pb-3">
         <div className="space-y-2">
@@ -61,14 +89,22 @@ const SlaveStatusCard: React.FC<SlaveStatusCardProps> = ({ slave, onReconnect })
               <span>CPU</span>
               <span>{slave.metrics.cpu}%</span>
             </div>
-            <Progress value={slave.metrics.cpu} className="h-1" />
+            <Progress 
+              value={slave.metrics.cpu} 
+              className="h-1" 
+              indicatorClassName={getCpuStatusColor(slave.metrics.cpu)}
+            />
           </div>
           <div className="space-y-1">
             <div className="flex items-center justify-between text-xs">
               <span>RAM</span>
               <span>{slave.metrics.ram}%</span>
             </div>
-            <Progress value={slave.metrics.ram} className="h-1" />
+            <Progress 
+              value={slave.metrics.ram} 
+              className="h-1" 
+              indicatorClassName={getRamStatusColor(slave.metrics.ram)}
+            />
           </div>
           <div className="flex items-center justify-between mt-2">
             <span className="text-xs text-muted-foreground">

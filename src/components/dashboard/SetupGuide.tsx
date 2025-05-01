@@ -1,100 +1,283 @@
 
 import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Check, Copy, Terminal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Copy, Info } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 
 const SetupGuide: React.FC = () => {
-  const handleCopyApiKey = () => {
-    navigator.clipboard.writeText("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkeHB4cWRld3FyYnZsc2FqZWVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mzc2NzM0MDMsImV4cCI6MjA1MzI0OTQwM30.-wnDf1hMWOow3O1kbcTfC3mw59h-5SsmdFGhp5bKgUE");
-    toast.success("API Key copied to clipboard");
-  };
-
-  const handleCopyRegistrationCommand = () => {
-    navigator.clipboard.writeText(
-      "curl -X POST https://qdxpxqdewqrbvlsajeeo.supabase.co/rest/v1/slaves -H \"apikey: YOUR_API_KEY\" -H \"Content-Type: application/json\" -d '{\"name\":\"SLAVE_NAME\",\"hostname\":\"HOST_NAME\",\"ip\":\"IP_ADDRESS\",\"status\":\"online\"}'"
-    );
-    toast.success("Registration command copied to clipboard");
-  };
-
-  const handleCopyUrl = () => {
-    navigator.clipboard.writeText("https://qdxpxqdewqrbvlsajeeo.supabase.co");
-    toast.success("Supabase URL copied to clipboard");
+  const copyToClipboard = (text: string, message: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(message);
   };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Info className="h-5 w-5" />
-          Slave Server Setup Guide
-        </CardTitle>
+        <CardTitle>Slave Setup Guide</CardTitle>
         <CardDescription>
-          Follow these steps to connect a slave server to your ViewerBot network
+          How to configure and connect slave servers to your network
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <h3 className="font-medium mb-2">1. Supabase Connection Details</h3>
-          <div className="space-y-2">
-            <div className="flex justify-between items-center p-2 bg-muted rounded-md">
-              <span className="text-sm font-mono">Supabase URL</span>
-              <Button variant="ghost" size="sm" onClick={handleCopyUrl}>
-                <Copy className="h-4 w-4" />
+      <CardContent className="pt-0">
+        <Tabs defaultValue="nodejs">
+          <TabsList className="mb-4">
+            <TabsTrigger value="nodejs">Node.js Script</TabsTrigger>
+            <TabsTrigger value="config">Configuration</TabsTrigger>
+            <TabsTrigger value="api">API Reference</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="nodejs" className="space-y-4">
+            <Alert>
+              <Terminal className="h-4 w-4" />
+              <AlertTitle>Server Requirements</AlertTitle>
+              <AlertDescription>
+                Install Node.js 18+ and the following packages:
+                <code className="block bg-muted p-2 rounded mt-2">
+                  npm install @supabase/supabase-js axios playwright
+                </code>
+              </AlertDescription>
+            </Alert>
+            
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium">Basic Slave Script Structure</h3>
+              <pre className="bg-muted p-4 rounded text-xs overflow-auto">
+{`// slave.js
+const { chromium } = require('playwright');
+const axios = require('axios');
+
+const SUPABASE_URL = 'https://qdxpxqdewqrbvlsajeeo.supabase.co';
+const SLAVE_ID = 'slave-' + Math.random().toString(36).substring(2, 9);
+const SLAVE_NAME = 'MySlaveServer';
+const SLAVE_HOSTNAME = 'server1.example.com';
+const SLAVE_IP = '192.168.1.100';
+
+// Register with master
+async function registerSlave() {
+  try {
+    const response = await axios.post(
+      'https://qdxpxqdewqrbvlsajeeo.functions.supabase.co/slave-webhook',
+      {
+        action: 'register',
+        slave: {
+          id: SLAVE_ID,
+          name: SLAVE_NAME,
+          hostname: SLAVE_HOSTNAME,
+          ip: SLAVE_IP,
+          metrics: {
+            cpu: 0,
+            ram: 0,
+            instances: 0
+          }
+        }
+      }
+    );
+    console.log('Slave registered:', response.data);
+    return response.data.slave.id;
+  } catch (error) {
+    console.error('Failed to register slave:', error);
+    throw error;
+  }
+}
+
+// Update metrics periodically
+function startMetricsReporter(slaveId) {
+  setInterval(async () => {
+    const metrics = {
+      cpu: Math.floor(Math.random() * 100),
+      ram: Math.floor(Math.random() * 100),
+      instances: activeInstances.length
+    };
+    
+    try {
+      await axios.post(
+        'https://qdxpxqdewqrbvlsajeeo.functions.supabase.co/slave-webhook',
+        {
+          action: 'update',
+          slaveId,
+          metrics
+        }
+      );
+    } catch (error) {
+      console.error('Failed to update metrics:', error);
+    }
+  }, 10000); // Every 10 seconds
+}
+
+// Poll for commands
+function startCommandPoller(slaveId) {
+  setInterval(async () => {
+    try {
+      const response = await axios.post(
+        'https://qdxpxqdewqrbvlsajeeo.functions.supabase.co/slave-webhook',
+        {
+          action: 'fetch_commands',
+          slaveId
+        }
+      );
+      
+      const commands = response.data.commands || [];
+      for (const command of commands) {
+        processCommand(command);
+      }
+    } catch (error) {
+      console.error('Failed to fetch commands:', error);
+    }
+  }, 5000); // Every 5 seconds
+}
+
+// Main function
+async function main() {
+  const slaveId = await registerSlave();
+  startMetricsReporter(slaveId);
+  startCommandPoller(slaveId);
+}
+
+main();`}
+              </pre>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="mt-2"
+                onClick={() => copyToClipboard(document.querySelector('pre')?.textContent || '', 'Code copied to clipboard')}
+              >
+                <Copy className="h-4 w-4 mr-2" />
+                Copy Code
               </Button>
             </div>
-            <div className="flex justify-between items-center p-2 bg-muted rounded-md">
-              <span className="text-sm font-mono">API Key</span>
-              <Button variant="ghost" size="sm" onClick={handleCopyApiKey}>
-                <Copy className="h-4 w-4" />
-              </Button>
+          </TabsContent>
+          
+          <TabsContent value="config" className="space-y-4">
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-medium mb-2">Connection Settings</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Webhook URL</p>
+                    <div className="flex items-center">
+                      <code className="bg-muted px-2 py-1 rounded text-xs flex-1">
+                        https://qdxpxqdewqrbvlsajeeo.functions.supabase.co/slave-webhook
+                      </code>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        className="h-6 w-6 p-0 ml-2"
+                        onClick={() => copyToClipboard('https://qdxpxqdewqrbvlsajeeo.functions.supabase.co/slave-webhook', 'Webhook URL copied')}
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Supabase URL</p>
+                    <div className="flex items-center">
+                      <code className="bg-muted px-2 py-1 rounded text-xs flex-1">
+                        https://qdxpxqdewqrbvlsajeeo.supabase.co
+                      </code>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        className="h-6 w-6 p-0 ml-2"
+                        onClick={() => copyToClipboard('https://qdxpxqdewqrbvlsajeeo.supabase.co', 'Supabase URL copied')}
+                      >
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="pt-2">
+                <h3 className="text-sm font-medium mb-2">System Requirements</h3>
+                <ul className="space-y-1">
+                  <li className="flex items-center">
+                    <Check className="h-4 w-4 mr-2 text-status-success" />
+                    <span className="text-sm">Node.js 18 or higher</span>
+                  </li>
+                  <li className="flex items-center">
+                    <Check className="h-4 w-4 mr-2 text-status-success" />
+                    <span className="text-sm">2GB+ RAM for browser instances</span>
+                  </li>
+                  <li className="flex items-center">
+                    <Check className="h-4 w-4 mr-2 text-status-success" />
+                    <span className="text-sm">Stable internet connection</span>
+                  </li>
+                  <li className="flex items-center">
+                    <Check className="h-4 w-4 mr-2 text-status-success" />
+                    <span className="text-sm">Linux recommended (Ubuntu 20.04+)</span>
+                  </li>
+                </ul>
+              </div>
             </div>
-          </div>
-        </div>
-        
-        <div>
-          <h3 className="font-medium mb-2">2. Registration Command</h3>
-          <div className="bg-muted p-2 rounded-md">
-            <pre className="text-xs font-mono overflow-x-auto whitespace-pre-wrap">
-              curl -X POST https://qdxpxqdewqrbvlsajeeo.supabase.co/rest/v1/slaves \{"\n"}
-              -H "apikey: YOUR_API_KEY" \{"\n"}
-              -H "Content-Type: application/json" \{"\n"}
-              -d '&#123;"name":"SLAVE_NAME","hostname":"HOST_NAME","ip":"IP_ADDRESS","status":"online"&#125;'
-            </pre>
-            <div className="flex justify-end mt-2">
-              <Button variant="ghost" size="sm" onClick={handleCopyRegistrationCommand}>
-                <Copy className="h-4 w-4" />
-              </Button>
+          </TabsContent>
+          
+          <TabsContent value="api" className="space-y-4">
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-medium mb-2">Webhook API Actions</h3>
+                <div className="rounded-md border">
+                  <div className="p-3 border-b">
+                    <div className="font-mono text-sm">register</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Register a new slave with the master server
+                    </p>
+                  </div>
+                  
+                  <div className="p-3 border-b">
+                    <div className="font-mono text-sm">update</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Update slave metrics (CPU, RAM, instances)
+                    </p>
+                  </div>
+                  
+                  <div className="p-3 border-b">
+                    <div className="font-mono text-sm">fetch_commands</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Retrieve pending commands for the slave
+                    </p>
+                  </div>
+                  
+                  <div className="p-3 border-b">
+                    <div className="font-mono text-sm">update_command</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Mark command as executed or failed
+                    </p>
+                  </div>
+                  
+                  <div className="p-3 border-b">
+                    <div className="font-mono text-sm">add_log</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Add a log entry to the master server
+                    </p>
+                  </div>
+                  
+                  <div className="p-3">
+                    <div className="font-mono text-sm">update_viewer</div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Update viewer instance status
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <Alert>
+                <AlertTitle>Command Types</AlertTitle>
+                <AlertDescription className="text-sm">
+                  <p className="mb-2">Slaves should handle these command types:</p>
+                  <ul className="list-disc pl-5 space-y-1 text-xs">
+                    <li><strong>spawn</strong> - Start a new viewer instance</li>
+                    <li><strong>stop</strong> - Stop a running viewer instance</li>
+                    <li><strong>update_proxy</strong> - Change proxy for a viewer</li>
+                    <li><strong>reconnect</strong> - Force reconnect to channel</li>
+                    <li><strong>custom</strong> - Custom commands with special payload</li>
+                  </ul>
+                </AlertDescription>
+              </Alert>
             </div>
-          </div>
-        </div>
-        
-        <div>
-          <h3 className="font-medium mb-2">3. Updating Status</h3>
-          <p className="text-sm text-muted-foreground">
-            Your slave server should regularly update its status by sending PATCH requests to the same endpoint:
-          </p>
-          <pre className="text-xs font-mono mt-2 bg-muted p-2 rounded-md">
-            PATCH /rest/v1/slaves?id=eq.YOUR_SLAVE_ID{"\n"}
-            &#123;"status":"online","last_seen":"2023-04-30T12:00:00Z","cpu":50,"ram":75,"instances":10&#125;
-          </pre>
-        </div>
-        
-        <div>
-          <h3 className="font-medium mb-2">4. Listening for Commands</h3>
-          <p className="text-sm text-muted-foreground">
-            Your slave server should listen to the Supabase realtime channel for commands:
-          </p>
-          <pre className="text-xs font-mono mt-2 bg-muted p-2 rounded-md">
-            {`const commandsChannel = supabase
-  .channel('commands-channel')
-  .on('postgres_changes', 
-    { event: 'INSERT', schema: 'public', table: 'commands', filter: 'target=eq.YOUR_SLAVE_ID' }, 
-    handleNewCommand)
-  .subscribe()`}
-          </pre>
-        </div>
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );

@@ -1,268 +1,185 @@
 
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
-  
-  // Get the authorization header
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader) {
-    return new Response(JSON.stringify({ error: 'Missing Authorization header' }), {
-      status: 401,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
-  }
-  
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") as string;
-  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") as string;
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
-  
   try {
-    // Parse the request body
-    const body = await req.json();
-    console.log("Received webhook from slave:", body);
+    const url = Deno.env.get('SUPABASE_URL') || ''
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
     
-    // Determine the action based on the endpoint
-    const url = new URL(req.url);
-    const path = url.pathname.split('/').pop();
+    // Erstelle einen Supabase-Client mit der Service-Role für Administratorzugriff
+    const supabase = createClient(url, key)
     
-    switch (path) {
-      case 'heartbeat':
-        // Update slave status
-        if (!body.id) {
-          return new Response(JSON.stringify({ error: 'Missing slave ID' }), {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+    // Extrahiere die Anforderungsdaten
+    const data = await req.json()
+    const action = data.action
+    
+    let result = null
+    
+    switch (action) {
+      case 'register':
+        // Registriere einen neuen Slave oder aktualisiere einen vorhandenen
+        const slave = data.slave
+        if (!slave || !slave.hostname) {
+          throw new Error('Invalid slave data')
         }
         
         const { data: slaveData, error: slaveError } = await supabase
           .from('slaves')
-          .update({
-            status: body.status || 'online',
-            last_seen: new Date().toISOString(),
-            cpu: body.cpu,
-            ram: body.ram,
-            instances: body.instances
-          })
-          .eq('id', body.id)
-          .select()
-          .single();
-        
-        if (slaveError) {
-          console.error("Error updating slave:", slaveError);
-          return new Response(JSON.stringify({ error: slaveError.message }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        
-        // Log the heartbeat
-        await supabase.from('logs').insert({
-          level: 'info',
-          source: `Slave-${body.id}`,
-          message: `Heartbeat received from ${slaveData.name}`,
-          details: {
-            cpu: body.cpu,
-            ram: body.ram,
-            instances: body.instances
-          }
-        });
-        
-        return new Response(JSON.stringify({ success: true, data: slaveData }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      
-      case 'register':
-        // Register a new slave
-        if (!body.name || !body.hostname || !body.ip) {
-          return new Response(JSON.stringify({ error: 'Missing required fields' }), {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
-        
-        const { data: newSlave, error: registerError } = await supabase
-          .from('slaves')
-          .insert({
-            name: body.name,
-            hostname: body.hostname,
-            ip: body.ip,
+          .upsert({
+            id: slave.id || undefined,
+            name: slave.name,
+            hostname: slave.hostname,
+            ip: slave.ip,
             status: 'online',
             last_seen: new Date().toISOString(),
-            cpu: 0,
-            ram: 0,
-            instances: 0
+            cpu: slave.metrics?.cpu || 0,
+            ram: slave.metrics?.ram || 0,
+            instances: slave.metrics?.instances || 0
           })
           .select()
-          .single();
+          .single()
         
-        if (registerError) {
-          console.error("Error registering slave:", registerError);
-          return new Response(JSON.stringify({ error: registerError.message }), {
-            status: 500,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+        if (slaveError) throw slaveError
+        result = { success: true, slave: slaveData }
+        break
+        
+      case 'update':
+        // Aktualisiere Slave-Metriken
+        const metrics = data.metrics
+        const slaveId = data.slaveId
+        
+        if (!slaveId) {
+          throw new Error('Missing slave ID')
         }
         
-        // Log the registration
-        await supabase.from('logs').insert({
-          level: 'info',
-          source: 'Master',
-          message: `New slave registered: ${body.name}`,
-          details: {
-            hostname: body.hostname,
-            ip: body.ip,
-            slaveId: newSlave.id
-          }
-        });
+        const { data: updateData, error: updateError } = await supabase
+          .from('slaves')
+          .update({
+            last_seen: new Date().toISOString(),
+            cpu: metrics?.cpu,
+            ram: metrics?.ram,
+            instances: metrics?.instances
+          })
+          .eq('id', slaveId)
+          .select()
+          .single()
         
-        return new Response(JSON.stringify({ success: true, data: newSlave }), {
-          status: 200,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        if (updateError) throw updateError
+        result = { success: true, slave: updateData }
+        break
+        
+      case 'fetch_commands':
+        // Hole ausstehende Befehle für einen Slave ab
+        const targetId = data.slaveId || data.hostname
+        
+        if (!targetId) {
+          throw new Error('Missing slave ID or hostname')
+        }
+        
+        const { data: commandData, error: commandError } = await supabase
+          .from('commands')
+          .select('*')
+          .or(`target.eq.${targetId},target.eq.all`)
+          .eq('status', 'pending')
+        
+        if (commandError) throw commandError
+        result = { success: true, commands: commandData || [] }
+        break
+        
+      case 'update_command':
+        // Aktualisiere den Status eines Befehls
+        const commandId = data.commandId
+        const status = data.status
+        const payload = data.payload
+        
+        if (!commandId || !status) {
+          throw new Error('Missing command ID or status')
+        }
+        
+        const { data: cmdUpdateData, error: cmdUpdateError } = await supabase
+          .from('commands')
+          .update({
+            status,
+            payload: payload || undefined
+          })
+          .eq('id', commandId)
+          .select()
+          .single()
+        
+        if (cmdUpdateError) throw cmdUpdateError
+        result = { success: true, command: cmdUpdateData }
+        break
+        
+      case 'add_log':
+        // Füge einen neuen Log-Eintrag hinzu
+        const log = data.log
+        
+        if (!log || !log.level || !log.message) {
+          throw new Error('Invalid log data')
+        }
+        
+        const { data: logData, error: logError } = await supabase
+          .from('logs')
+          .insert({
+            level: log.level,
+            source: log.source,
+            message: log.message,
+            details: log.details || undefined
+          })
+          .select()
+          .single()
+        
+        if (logError) throw logError
+        result = { success: true, log: logData }
+        break
       
-      case 'viewer':
-        // Handle viewer updates
-        if (!body.action || !body.slaveId) {
-          return new Response(JSON.stringify({ error: 'Missing required fields' }), {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+      case 'update_viewer':
+        // Aktualisiere den Status einer Viewer-Instanz
+        const viewerId = data.viewerId
+        const viewerStatus = data.status
+        const error = data.error
+        
+        if (!viewerId || !viewerStatus) {
+          throw new Error('Missing viewer ID or status')
         }
         
-        if (body.action === 'start') {
-          // Start a new viewer
-          const { data: viewer, error: viewerError } = await supabase
-            .from('viewers')
-            .insert({
-              slave_id: body.slaveId,
-              url: body.url,
-              status: 'running',
-              start_time: new Date().toISOString()
-            })
-            .select()
-            .single();
-          
-          if (viewerError) {
-            console.error("Error starting viewer:", viewerError);
-            return new Response(JSON.stringify({ error: viewerError.message }), {
-              status: 500,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
-          
-          // Log the viewer start
-          await supabase.from('logs').insert({
-            level: 'info',
-            source: `Slave-${body.slaveId}`,
-            message: `New viewer started for ${body.url}`,
-            details: {
-              viewerId: viewer.id,
-              url: body.url
-            }
-          });
-          
-          return new Response(JSON.stringify({ success: true, data: viewer }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        } else if (body.action === 'stop') {
-          // Stop a viewer
-          const { data: viewer, error: viewerError } = await supabase
-            .from('viewers')
-            .update({
-              status: 'stopped'
-            })
-            .eq('id', body.viewerId)
-            .select()
-            .single();
-          
-          if (viewerError) {
-            console.error("Error stopping viewer:", viewerError);
-            return new Response(JSON.stringify({ error: viewerError.message }), {
-              status: 500,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
-          
-          // Log the viewer stop
-          await supabase.from('logs').insert({
-            level: 'info',
-            source: `Slave-${body.slaveId}`,
-            message: `Viewer stopped for ${viewer.url}`,
-            details: {
-              viewerId: viewer.id
-            }
-          });
-          
-          return new Response(JSON.stringify({ success: true, data: viewer }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        } else if (body.action === 'error') {
-          // Report a viewer error
-          const { data: viewer, error: viewerError } = await supabase
-            .from('viewers')
-            .update({
-              status: 'error',
-              error: body.error
-            })
-            .eq('id', body.viewerId)
-            .select()
-            .single();
-          
-          if (viewerError) {
-            console.error("Error updating viewer error:", viewerError);
-            return new Response(JSON.stringify({ error: viewerError.message }), {
-              status: 500,
-              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-            });
-          }
-          
-          // Log the viewer error
-          await supabase.from('logs').insert({
-            level: 'error',
-            source: `Slave-${body.slaveId}`,
-            message: `Viewer error: ${body.error || 'Unknown error'}`,
-            details: {
-              viewerId: viewer.id,
-              url: viewer.url
-            }
-          });
-          
-          return new Response(JSON.stringify({ success: true, data: viewer }), {
-            status: 200,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
-        }
+        const { data: viewerUpdateData, error: viewerUpdateError } = await supabase
+          .from('viewers')
+          .update({
+            status: viewerStatus,
+            error: error || null
+          })
+          .eq('id', viewerId)
+          .select()
+          .single()
         
-        return new Response(JSON.stringify({ error: 'Invalid action' }), {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      
+        if (viewerUpdateError) throw viewerUpdateError
+        result = { success: true, viewer: viewerUpdateData }
+        break
+        
       default:
-        return new Response(JSON.stringify({ error: 'Invalid endpoint' }), {
-          status: 404,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+        throw new Error(`Unknown action: ${action}`)
     }
+    
+    return new Response(
+      JSON.stringify(result),
+      {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200
+      }
+    )
   } catch (error) {
-    console.error("Error processing webhook:", error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.error('Error in slave webhook:', error.message)
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message
+      }),
+      {
+        headers: { 'Content-Type': 'application/json' },
+        status: 500
+      }
+    )
   }
-});
+})
