@@ -15,11 +15,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Copy, Key } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { supabase } from '@/integrations/supabase/client';
 
 const Index = () => {
   const { slaves, viewers, logs, addCommand, updateSlave, removeViewer, clearLogs } = useApp();
   const [apiKey, setApiKey] = useState<string>('');
   const [showApiKey, setShowApiKey] = useState<boolean>(false);
+  
+  // Fetch API key from localStorage when component mounts
+  React.useEffect(() => {
+    const storedKey = localStorage.getItem('slaveApiKey');
+    if (storedKey) {
+      setApiKey(storedKey);
+    }
+  }, []);
   
   const handleReconnectSlave = (id: string) => {
     // In a real application, this would send a reconnect signal to the slave
@@ -65,12 +74,22 @@ const Index = () => {
       .map(() => Math.floor(Math.random() * 16).toString(16))
       .join("");
     setApiKey(randomKey);
-    toast.success("API key generated. Don't forget to set it as a secret in your Supabase Edge Function settings.");
+    
+    // Store in localStorage for convenience
+    localStorage.setItem('slaveApiKey', randomKey);
+    
+    toast.success("API key generated. Make sure to set it as a secret in your Supabase Edge Function settings.");
   };
   
   const copyApiKey = () => {
     navigator.clipboard.writeText(apiKey);
     toast.success("API key copied to clipboard");
+  };
+  
+  const saveApiKeyToSupabase = async () => {
+    // This is just a demo function that shows how you might save the key to a database
+    // In a real app, you'd probably use a more secure method like Supabase Edge Function secrets
+    toast.info("In a production environment, you should set this key in the Supabase Edge Function secrets panel");
   };
   
   return (

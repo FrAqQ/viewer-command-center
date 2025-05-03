@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,11 +14,13 @@ import { PlayCircle, Plus, Minus, StopCircle, Loader2, Trash2, RefreshCw } from 
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/components/ui/sonner';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { supabase, getProxyUrlById } from '@/integrations/supabase/client';
 
 const TestViewerPage = () => {
-  const { addViewer, removeViewer, updateViewer, viewers, proxies, isLoading } = useApp();
+  const { addViewer, removeViewer, updateViewer, viewers, proxies, slaves, isLoading, addCommand } = useApp();
   const [url, setUrl] = useState('https://twitch.tv/');
   const [selectedProxyId, setSelectedProxyId] = useState<string>('');
+  const [selectedSlaveId, setSelectedSlaveId] = useState<string>('');
   const [logs, setLogs] = useState<string[]>(() => {
     try {
       const savedLogs = localStorage.getItem('viewerTestLogs');
@@ -29,24 +32,45 @@ const TestViewerPage = () => {
   });
   const [isTesting, setIsTesting] = useState(false);
   const [count, setCount] = useState(1);
+  const [recentCommands, setRecentCommands] = useState<any[]>([]);
   
   const localViewers = viewers.filter(v => !v.slaveId);
   const validProxies = proxies.filter(p => p.valid);
+  const onlineSlaves = slaves.filter(s => s.status === 'online');
   
   // Save logs to localStorage when they change
   useEffect(() => {
     localStorage.setItem('viewerTestLogs', JSON.stringify(logs));
   }, [logs]);
   
+  // Load recent commands
+  useEffect(() => {
+    const loadRecentCommands = async () => {
+      const { data, error } = await supabase
+        .from('commands')
+        .select('*')
+        .order('timestamp', { ascending: false })
+        .limit(10);
+      
+      if (error) {
+        console.error('Error loading recent commands:', error);
+      } else if (data) {
+        setRecentCommands(data);
+      }
+    };
+    
+    loadRecentCommands();
+    
+    // Set up a polling interval to refresh commands
+    const intervalId = setInterval(loadRecentCommands, 5000);
+    
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, []);
+  
   const addLog = (message: string) => {
     setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${message}`, ...prev]);
-  };
-  
-  const getSelectedProxy = (): Proxy | undefined => {
-    if (selectedProxyId) {
-      return proxies.find(p => p.id === selectedProxyId);
-    }
-    return undefined;
   };
   
   const handleSpawnViewer = async (count: number = 1) => {
@@ -56,86 +80,74 @@ const TestViewerPage = () => {
       return;
     }
     
+    if (!selectedSlaveId) {
+      toast.error('Please select a slave server');
+      addLog('Error: Please select a slave server');
+      return;
+    }
+    
     setIsTesting(true);
     
     try {
       for (let i = 0; i < count; i++) {
-        let proxyString: string | undefined = undefined;
-        let proxyToUse: Proxy | undefined = undefined;
+        // Instead of creating a viewer directly, create a command for the slave
+        const viewerId = `viewer-${Date.now()}-${i}`;
+        const proxyString = selectedProxyId ? await getProxyUrlById(selectedProxyId) : null;
         
-        if (selectedProxyId) {
-          proxyToUse = getSelectedProxy();
-        } else if (validProxies.length > 0) {
-          // Choose a random proxy if none selected
-          proxyToUse = validProxies[Math.floor(Math.random() * validProxies.length)];
-        }
-        
-        if (proxyToUse) {
-          proxyString = proxyToUse.username && proxyToUse.password ? 
-            `${proxyToUse.address}:${proxyToUse.port}:${proxyToUse.username}:${proxyToUse.password}` : 
-            `${proxyToUse.address}:${proxyToUse.port}`;
-        }
-        
-        const viewer: ViewerInstance = {
-          id: `local-${Date.now()}-${i}`,
-          url,
-          proxy: proxyString,
-          status: 'running',
-          startTime: new Date().toISOString(),
+        const command = {
+          id: `cmd-${Date.now()}-${i}`,
+          type: 'spawn',
+          target: selectedSlaveId,
+          payload: {
+            id: viewerId,
+            url,
+            proxy: proxyString
+          },
+          timestamp: new Date().toISOString(),
+          status: 'pending'
         };
         
-        await addViewer(viewer);
+        await addCommand(command);
         
-        addLog(`Spawned viewer for ${url} ${proxyToUse ? `with proxy ${proxyToUse.address}:${proxyToUse.port}` : 'without proxy'}`);
-        
-        // Simulate random outcomes for testing
-        simulateViewerOutcome(viewer.id);
+        addLog(`Command sent to ${selectedSlaveId} to spawn viewer for ${url} ${proxyString ? `with proxy ${proxyString}` : 'without proxy'}`);
       }
+      
+      toast.success(`${count} viewer command${count !== 1 ? 's' : ''} sent to slave`);
     } catch (error) {
-      console.error('Error spawning viewers:', error);
-      toast.error('Failed to spawn viewers');
-      addLog(`Error: Failed to spawn viewers - ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Error sending viewer commands:', error);
+      toast.error('Failed to send viewer commands');
+      addLog(`Error: Failed to send viewer commands - ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsTesting(false);
     }
   };
   
-  const simulateViewerOutcome = (viewerId: string) => {
-    // Simulate some random outcomes for testing
-    setTimeout(() => {
-      const outcome = Math.random();
-      
-      if (outcome < 0.1) {
-        // 10% chance of error
-        updateViewer(viewerId, { status: 'error', error: 'Connection refused' });
-        addLog(`Error: Failed to connect to ${url} (Connection refused)`);
-        toast.error(`Viewer connection failed: Connection refused`);
-      } else if (outcome < 0.2) {
-        // 10% chance of authentication error
-        updateViewer(viewerId, { status: 'error', error: 'Authentication failed' });
-        addLog(`Error: Authentication failed for ${url}`);
-        toast.error(`Viewer authentication failed`);
-      } else if (outcome < 0.3) {
-        // 10% chance of timeout
-        updateViewer(viewerId, { status: 'error', error: 'Connection timeout' });
-        addLog(`Error: Timeout connecting to ${url}`);
-        toast.error(`Viewer connection timeout`);
-      }
-      // The other 70% remain in 'running' status
-    }, Math.random() * 5000 + 2000); // Random delay between 2-7 seconds
-  };
-  
   const handleStopAll = async () => {
+    if (!selectedSlaveId) {
+      toast.error('Please select a slave server');
+      addLog('Error: Please select a slave server');
+      return;
+    }
+    
     setIsTesting(true);
     try {
-      for (const viewer of localViewers) {
-        await removeViewer(viewer.id);
-      }
-      addLog(`Stopped all viewers`);
-      toast.success('All viewers stopped');
+      const command = {
+        id: `cmd-${Date.now()}`,
+        type: 'stop',
+        target: selectedSlaveId,
+        payload: {
+          all: true
+        },
+        timestamp: new Date().toISOString(),
+        status: 'pending'
+      };
+      
+      await addCommand(command);
+      addLog(`Stop all viewers command sent to ${selectedSlaveId}`);
+      toast.success('Stop all viewers command sent');
     } catch (error) {
-      console.error('Error stopping viewers:', error);
-      toast.error('Failed to stop all viewers');
+      console.error('Error sending stop command:', error);
+      toast.error('Failed to send stop command');
     } finally {
       setIsTesting(false);
     }
@@ -197,7 +209,7 @@ const TestViewerPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Spawn Local Viewers</CardTitle>
+              <CardTitle>Spawn Viewers via Slave</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -211,14 +223,38 @@ const TestViewerPage = () => {
               </div>
               
               <div className="space-y-2">
+                <Label htmlFor="slave">Slave Server</Label>
+                <Select value={selectedSlaveId} onValueChange={setSelectedSlaveId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a slave server" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {onlineSlaves.length === 0 ? (
+                      <SelectItem value="none" disabled>No online slaves available</SelectItem>
+                    ) : (
+                      onlineSlaves.map((slave) => (
+                        <SelectItem key={slave.id} value={slave.id}>
+                          {slave.name} ({slave.hostname})
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {onlineSlaves.length === 0 && (
+                  <p className="text-xs text-red-500">
+                    No online slaves available. Add a slave server first.
+                  </p>
+                )}
+              </div>
+              
+              <div className="space-y-2">
                 <Label htmlFor="proxy">Proxy (Optional)</Label>
                 <Select value={selectedProxyId} onValueChange={setSelectedProxyId}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select a proxy or use random" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Random Valid Proxy</SelectItem>
-                    <SelectItem value="none">No Proxy</SelectItem>
+                    <SelectItem value="">No Proxy</SelectItem>
                     {validProxies.map((proxy) => (
                       <SelectItem key={proxy.id} value={proxy.id}>
                         {proxy.address}:{proxy.port}
@@ -262,38 +298,28 @@ const TestViewerPage = () => {
               <div className="flex flex-wrap gap-2 pt-2">
                 <Button 
                   onClick={() => handleSpawnViewer(count)} 
-                  disabled={isTesting}
+                  disabled={isTesting || onlineSlaves.length === 0}
                 >
                   {isTesting ? (
                     <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                   ) : (
                     <PlayCircle className="h-4 w-4 mr-1" />
                   )}
-                  Spawn Viewers
+                  Send Spawn Command
                 </Button>
                 
-                {localViewers.length > 0 && (
-                  <Button 
-                    variant="destructive" 
-                    onClick={handleStopAll}
-                    disabled={isTesting}
-                  >
-                    {isTesting ? (
-                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                    ) : (
-                      <StopCircle className="h-4 w-4 mr-1" />
-                    )}
-                    Stop All
-                  </Button>
-                )}
-              </div>
-              
-              <div className="text-sm text-muted-foreground mt-2">
-                {localViewers.length > 0 ? (
-                  <p>{localViewers.length} viewer{localViewers.length !== 1 ? 's' : ''} running locally</p>
-                ) : (
-                  <p>No active viewers</p>
-                )}
+                <Button 
+                  variant="destructive" 
+                  onClick={handleStopAll}
+                  disabled={isTesting || onlineSlaves.length === 0}
+                >
+                  {isTesting ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <StopCircle className="h-4 w-4 mr-1" />
+                  )}
+                  Send Stop All Command
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -328,8 +354,75 @@ const TestViewerPage = () => {
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Active Local Viewers</CardTitle>
-            {localViewers.length > 0 && (
+            <CardTitle>Recent Commands</CardTitle>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={async () => {
+                const { data, error } = await supabase
+                  .from('commands')
+                  .select('*')
+                  .order('timestamp', { ascending: false })
+                  .limit(10);
+                
+                if (error) {
+                  console.error('Error refreshing commands:', error);
+                  toast.error('Failed to refresh commands');
+                } else if (data) {
+                  setRecentCommands(data);
+                  toast.success('Commands refreshed');
+                }
+              }}
+            >
+              <RefreshCw className="h-4 w-4 mr-1" />
+              Refresh
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {recentCommands.length === 0 ? (
+              <div className="text-center py-4">
+                <p className="text-muted-foreground">No commands have been sent yet</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Target</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Payload</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recentCommands.map((command) => (
+                    <TableRow key={command.id}>
+                      <TableCell className="capitalize">{command.type}</TableCell>
+                      <TableCell>{command.target}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <span className={`status-dot ${command.status === 'executed' ? 'success' : command.status === 'pending' ? 'warning' : 'danger'}`} />
+                          <span className="capitalize">{command.status}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>{new Date(command.timestamp).toLocaleTimeString()}</TableCell>
+                      <TableCell className="max-w-[200px] truncate">
+                        <code className="text-xs">
+                          {JSON.stringify(command.payload)}
+                        </code>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+        
+        {localViewers.length > 0 && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle>Active Local Viewers</CardTitle>
               <Button 
                 variant="outline" 
                 size="sm"
@@ -349,14 +442,8 @@ const TestViewerPage = () => {
                 <RefreshCw className="h-4 w-4 mr-1" />
                 Refresh Status
               </Button>
-            )}
-          </CardHeader>
-          <CardContent>
-            {localViewers.length === 0 ? (
-              <div className="text-center py-4">
-                <p className="text-muted-foreground">No active viewers</p>
-              </div>
-            ) : (
+            </CardHeader>
+            <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -396,9 +483,9 @@ const TestViewerPage = () => {
                   ))}
                 </TableBody>
               </Table>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </Layout>
   );

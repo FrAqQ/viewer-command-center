@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SlaveServer, Command } from '@/types';
 import { useApp } from '@/context/AppContext';
 import { PlayCircle, RefreshCw, StopCircle } from 'lucide-react';
+import { getProxyUrlById } from '@/integrations/supabase/client';
 
 interface CommandPanelProps {
   slaves: SlaveServer[];
@@ -18,12 +19,24 @@ const CommandPanel: React.FC<CommandPanelProps> = ({ slaves }) => {
   const [slaveId, setSlaveId] = useState<string>('all');
   const [viewerCount, setViewerCount] = useState(1);
   
-  const handleSendCommand = (type: 'spawn' | 'stop' | 'update_proxy' | 'reconnect') => {
+  const handleSendCommand = async (type: 'spawn' | 'stop' | 'update_proxy' | 'reconnect') => {
     let payload: Record<string, any> = {};
     
     switch (type) {
       case 'spawn':
-        payload = { url, count: viewerCount };
+        if (viewerCount > 0) {
+          payload = { 
+            url, 
+            count: viewerCount 
+          };
+          
+          // If we're spawning viewers and a proxy is selected, add it to the payload
+          if (url && viewerCount > 0) {
+            // We could select a random proxy here if needed
+            // const randomProxy = await getRandomValidProxy();
+            // if (randomProxy) payload.proxy = randomProxy;
+          }
+        }
         break;
       case 'stop':
         payload = { all: true };
@@ -45,7 +58,7 @@ const CommandPanel: React.FC<CommandPanelProps> = ({ slaves }) => {
       status: 'pending',
     };
     
-    addCommand(command);
+    await addCommand(command);
   };
   
   return (
