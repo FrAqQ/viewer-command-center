@@ -96,7 +96,7 @@ const TestViewerPage = () => {
         
         const command = {
           id: `cmd-${Date.now()}-${i}`,
-          type: 'spawn',
+          type: 'spawn' as const, // Fix: Use a literal type assertion
           target: selectedSlaveId,
           payload: {
             id: viewerId,
@@ -104,7 +104,7 @@ const TestViewerPage = () => {
             proxy: proxyString
           },
           timestamp: new Date().toISOString(),
-          status: 'pending'
+          status: 'pending' as const // Fix: Use literal type assertion
         };
         
         await addCommand(command);
@@ -133,13 +133,13 @@ const TestViewerPage = () => {
     try {
       const command = {
         id: `cmd-${Date.now()}`,
-        type: 'stop',
+        type: 'stop' as const, // Fix: Use a literal type assertion
         target: selectedSlaveId,
         payload: {
           all: true
         },
         timestamp: new Date().toISOString(),
-        status: 'pending'
+        status: 'pending' as const // Fix: Use literal type assertion
       };
       
       await addCommand(command);
