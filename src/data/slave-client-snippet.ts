@@ -10,7 +10,7 @@ const { createClient } = require('@supabase/supabase-js');
 // ==== CONFIGURATION ====
 // Replace these with your own values
 const slaveConfig = {
-  name: 'Slave-01',
+  name: '', // Will be generated automatically before first connection
   id: '', // Will be assigned by the master on first connection
   hostname: os.hostname(), 
 };
@@ -40,6 +40,42 @@ const state = {
 
 // ==== UTILITY FUNCTIONS ====
 
+// Generate a unique slave name
+async function generateUniqueSlaveName(baseName = "Slave-WIN") {
+  console.log("Generating unique slave name...");
+  try {
+    for (let i = 1; i < 1000; i++) {
+      const name = \`\${baseName}\${i.toString().padStart(2, '0')}\`;
+      
+      // Check if this name already exists in the database
+      const { data, error } = await supabase
+        .from("slaves")
+        .select("id")
+        .eq("name", name)
+        .maybeSingle();
+      
+      if (error) {
+        console.error("Error checking slave name:", error);
+        continue;
+      }
+      
+      // If no data returned, this name is available
+      if (!data) {
+        console.log(\`Found available name: \${name}\`);
+        return name;
+      }
+    }
+    
+    // If we've tried 1000 names and none are available, use a timestamp
+    const fallbackName = \`\${baseName}-\${Date.now()}\`;
+    console.log(\`All standard names taken, using fallback: \${fallbackName}\`);
+    return fallbackName;
+  } catch (err) {
+    console.error("Failed to generate unique slave name:", err);
+    return \`\${baseName}-\${Date.now()}\`; // Fallback with timestamp
+  }
+}
+
 // Get system metrics
 async function getSystemMetrics() {
   return new Promise((resolve) => {
@@ -58,6 +94,11 @@ async function getSystemMetrics() {
 // Send status update to master
 async function sendStatusUpdate() {
   try {
+    // If we don't have a name yet, generate one
+    if (!slaveConfig.name) {
+      slaveConfig.name = await generateUniqueSlaveName();
+    }
+    
     const metrics = await getSystemMetrics();
     
     const response = await axios.post(masterConfig.url, {
@@ -305,7 +346,11 @@ async function processCommand(command) {
 
 // ==== INITIALIZATION ====
 async function init() {
-  console.log(\`Starting slave node: \${slaveConfig.name} on \${slaveConfig.hostname}\`);
+  console.log(\`Starting slave node on \${slaveConfig.hostname}\`);
+  
+  // Generate a unique name before first status update
+  slaveConfig.name = await generateUniqueSlaveName();
+  console.log(\`Generated unique slave name: \${slaveConfig.name}\`);
   
   // Send initial status update
   await sendStatusUpdate();
@@ -324,3 +369,4 @@ init().catch(err => {
   console.error('Failed to initialize slave:', err);
 });
 `;
+

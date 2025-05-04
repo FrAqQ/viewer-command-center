@@ -47,36 +47,19 @@ serve(async (req) => {
 
     // Parse request body
     const requestBody = await req.json()
-    console.log('Received webhook payload type:', requestBody.type)
+    
+    // Extract common data from the request
+    const { id: slaveId, name: slaveName, hostname, ip, status = 'online', metrics = {} } = requestBody
+    console.log(`Received update from ${slaveName} (${slaveId || 'new slave'})`)
 
-    // Handle different webhook types
-    const { type, slaveId, slaveName, data } = requestBody
-
-    // Common validation
-    if (!slaveId) {
-      throw new Error('Missing slaveId in request')
-    }
-
-    // Process based on webhook type
-    switch (type) {
-      case 'status_update':
-        return await handleStatusUpdate(slaveId, slaveName, data)
-      
-      case 'viewer_update':
-        return await handleViewerUpdate(slaveId, data)
-      
-      case 'log_entry':
-        return await handleLogEntry(slaveId, data)
-      
-      case 'command_result':
-        return await handleCommandResult(slaveId, data)
-      
-      case 'get_pending_commands':
-        return await getPendingCommands(slaveId)
-      
-      default:
-        throw new Error('Unknown webhook type')
-    }
+    // Handle the status update (main functionality for now)
+    return await handleStatusUpdate(slaveId, slaveName, { 
+      hostname,
+      ip,
+      status,
+      metrics
+    })
+    
   } catch (error) {
     console.error('Error processing webhook:', error.message)
     
@@ -99,12 +82,15 @@ async function handleStatusUpdate(slaveId: string, slaveName: string, data: any)
   }
 
   const { status, metrics } = data
+  
+  // Generate a UUID if not provided (for new slaves)
+  const effectiveSlaveId = slaveId || crypto.randomUUID()
 
-  // Use upsert with conflict target on id instead of checking existence first
+  // Use upsert with conflict target on id
   const { data: upsertedSlave, error: upsertError } = await supabaseClient
     .from('slaves')
     .upsert([{
-      id: slaveId,
+      id: effectiveSlaveId,
       name: slaveName,
       hostname: data.hostname || 'Unknown',
       ip: data.ip || '0.0.0.0',
@@ -114,23 +100,17 @@ async function handleStatusUpdate(slaveId: string, slaveName: string, data: any)
       ram: metrics?.ram || 0,
       instances: metrics?.instances || 0
     }], { 
-      onConflict: 'id'  // Important: This ensures we update existing records
+      onConflict: 'id' // Important: This ensures we update existing records
     })
     .select()
 
   if (upsertError) {
+    console.error(`Error upserting slave:`, upsertError)
     throw new Error(`Error upserting slave: ${upsertError.message}`)
   }
 
-  // Only log when a new slave is registered (not when updating)
-  const { data: existingSlave } = await supabaseClient
-    .from('slaves')
-    .select('created_at')
-    .eq('id', slaveId)
-    .single()
-
-  // If the created_at timestamp is very recent, this was likely a new insert
-  if (existingSlave && new Date().getTime() - new Date(existingSlave.created_at).getTime() < 5000) {
+  // Only log first registration, not subsequent updates
+  if (!slaveId) {
     await supabaseClient
       .from('logs')
       .insert({
@@ -138,7 +118,7 @@ async function handleStatusUpdate(slaveId: string, slaveName: string, data: any)
         source: 'system',
         message: `New slave registered: ${slaveName}`,
         details: {
-          slaveId,
+          slaveId: effectiveSlaveId,
           hostname: data.hostname || 'Unknown',
           ip: data.ip || '0.0.0.0'
         }
@@ -147,72 +127,9 @@ async function handleStatusUpdate(slaveId: string, slaveName: string, data: any)
 
   return new Response(JSON.stringify({ 
     success: true, 
-    message: 'Status updated successfully',
+    message: slaveId ? 'Status updated successfully' : 'New slave registered successfully',
+    id: effectiveSlaveId, // Return the ID (especially important for new slaves)
     data: upsertedSlave
-  }), {
-    status: 200,
-    headers: {
-      ...corsHeaders,
-      'Content-Type': 'application/json'
-    }
-  })
-}
-
-// Handler for viewer status updates
-async function handleViewerUpdate(slaveId: string, data: any) {
-  if (!data || !Array.isArray(data.viewers)) {
-    throw new Error('Invalid data payload for viewer_update')
-  }
-
-  const { viewers } = data
-  const results = []
-
-  // Process each viewer
-  for (const viewer of viewers) {
-    const { id, url, proxy, status, error, screenshot } = viewer
-    
-    if (!id) {
-      console.warn('Skipping viewer update with missing id')
-      continue
-    }
-
-    // Check if the screenshot column exists
-    const hasScreenshotColumn = await checkColumnExists('viewers', 'screenshot')
-
-    // Use upsert with conflict target on id
-    const upsertData: any = {
-      id,
-      slave_id: slaveId,
-      url,
-      proxy,
-      status,
-      error: error || null
-    }
-    
-    // Only add screenshot if the column exists and screenshot is provided
-    if (hasScreenshotColumn && screenshot) {
-      upsertData.screenshot = screenshot
-    }
-
-    const { data: upsertedViewer, error: upsertError } = await supabaseClient
-      .from('viewers')
-      .upsert([upsertData], { 
-        onConflict: 'id' 
-      })
-      .select()
-
-    if (upsertError) {
-      console.error(`Error upserting viewer ${id}:`, upsertError)
-      continue
-    }
-    
-    results.push(upsertedViewer)
-  }
-
-  return new Response(JSON.stringify({ 
-    success: true, 
-    message: `Processed ${results.length} viewer updates`,
-    data: results
   }), {
     status: 200,
     headers: {
@@ -259,105 +176,3 @@ async function checkColumnExists(tableName: string, columnName: string): Promise
   return data === true
 }
 
-// Handler for log entries
-async function handleLogEntry(slaveId: string, data: any) {
-  if (!data || !data.message) {
-    throw new Error('Invalid data payload for log_entry')
-  }
-
-  const { level = 'info', message, details = {} } = data
-
-  // Add the log entry
-  const { error } = await supabaseClient
-    .from('logs')
-    .insert({
-      level,
-      source: `slave:${slaveId}`,
-      message,
-      details: { ...details, slaveId }
-    })
-
-  if (error) {
-    throw new Error(`Error inserting log entry: ${error.message}`)
-  }
-
-  return new Response(JSON.stringify({ 
-    success: true, 
-    message: 'Log entry recorded'
-  }), {
-    status: 200,
-    headers: {
-      ...corsHeaders,
-      'Content-Type': 'application/json'
-    }
-  })
-}
-
-// Handler for command execution results
-async function handleCommandResult(slaveId: string, data: any) {
-  if (!data || !data.commandId) {
-    throw new Error('Invalid data payload for command_result')
-  }
-
-  const { commandId, status, result } = data
-
-  // Update command status
-  const { error } = await supabaseClient
-    .from('commands')
-    .update({
-      status: status,
-      result: result || null
-    })
-    .eq('id', commandId)
-
-  if (error) {
-    throw new Error(`Error updating command status: ${error.message}`)
-  }
-
-  // Add log entry for command completion
-  await supabaseClient
-    .from('logs')
-    .insert({
-      level: status === 'executed' ? 'info' : 'error',
-      source: `slave:${slaveId}`,
-      message: `Command ${commandId} ${status}`,
-      details: { commandId, result }
-    })
-
-  return new Response(JSON.stringify({ 
-    success: true, 
-    message: 'Command result recorded'
-  }), {
-    status: 200,
-    headers: {
-      ...corsHeaders,
-      'Content-Type': 'application/json'
-    }
-  })
-}
-
-// Get pending commands for a slave
-async function getPendingCommands(slaveId: string) {
-  // Fetch pending commands for this slave or 'all' slaves
-  const { data: commands, error } = await supabaseClient
-    .from('commands')
-    .select('*')
-    .eq('status', 'pending')
-    .or(`target.eq.${slaveId},target.eq.all`)
-    .order('timestamp', { ascending: true })
-
-  if (error) {
-    throw new Error(`Error fetching pending commands: ${error.message}`)
-  }
-
-  return new Response(JSON.stringify({ 
-    success: true, 
-    data: commands || []
-  }), {
-    status: 200,
-    headers: {
-      ...corsHeaders,
-      'Content-Type': 'application/json'
-    }
-  })
-}
