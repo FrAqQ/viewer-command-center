@@ -8,18 +8,22 @@ import { supabase } from '../client';
  * @returns Number of currently running viewers
  */
 export async function countRunningViewers(userId: string): Promise<number> {
-  const query: any = supabase
-    .from('viewers')
-    .select('', { count: 'exact', head: true })
-    .eq('user_id', userId)
-    .eq('status', 'running');
+  try {
+    // Apply 'as any' to the entire query chain to prevent TypeScript from analyzing types deeply
+    const response = await (supabase
+      .from('viewers')
+      .select('', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('status', 'running') as any);
 
-  const response = await query;
+    if (response?.error) {
+      console.error('Error while counting viewers:', response.error);
+      return 0;
+    }
 
-  if (response?.error) {
-    console.error('Error while counting viewers:', response.error);
+    return response.count || 0;
+  } catch (error) {
+    console.error('Unexpected error counting viewers:', error);
     return 0;
   }
-
-  return response.count || 0;
 }
