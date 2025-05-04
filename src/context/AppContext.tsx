@@ -1,3 +1,4 @@
+
 import React, {
   createContext,
   useState,
@@ -387,20 +388,28 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
           toast.error("Failed to load commands from Supabase: " + commandsError.message);
         } else if (commandsData) {
           // Map the data to match our Command type with proper type handling for result
-          const mappedCommands: Command[] = commandsData.map(cmd => ({
-            id: cmd.id,
-            type: cmd.type as 'spawn' | 'stop' | 'update_proxy' | 'reconnect' | 'custom',
-            target: cmd.target,
-            payload: typeof cmd.payload === 'object' && cmd.payload !== null ? cmd.payload as Record<string, any> : { value: cmd.payload },
-            timestamp: cmd.timestamp,
-            status: (cmd.status as 'pending' | 'executed' | 'failed') || 'pending',
-            // Only include result if it exists in the data
-            ...(cmd.result !== undefined && { 
-              result: typeof cmd.result === 'object' && cmd.result !== null ? 
+          const mappedCommands: Command[] = commandsData.map(cmd => {
+            // Create base command object
+            const commandObj: Command = {
+              id: cmd.id,
+              type: cmd.type as 'spawn' | 'stop' | 'update_proxy' | 'reconnect' | 'custom',
+              target: cmd.target,
+              payload: typeof cmd.payload === 'object' && cmd.payload !== null ? 
+                cmd.payload as Record<string, any> : 
+                { value: cmd.payload },
+              timestamp: cmd.timestamp,
+              status: (cmd.status as 'pending' | 'executed' | 'failed') || 'pending',
+            };
+            
+            // Add result property if it exists in the data
+            if ('result' in cmd && cmd.result !== undefined) {
+              commandObj.result = typeof cmd.result === 'object' && cmd.result !== null ? 
                 cmd.result as Record<string, any> : 
-                { value: cmd.result } 
-            })
-          }));
+                { value: cmd.result };
+            }
+            
+            return commandObj;
+          });
           setCommands(mappedCommands);
         }
       } catch (error) {
