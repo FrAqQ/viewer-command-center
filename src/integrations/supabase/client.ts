@@ -153,21 +153,31 @@ export const sendCommand = async (command: {
 
 // Get user plan and viewer limit
 export const getUserPlanLimit = async (userId: string): Promise<number> => {
-  // Fix: Use explicit type annotation to avoid excessive type instantiation
+  // Avoid complex type inference by using more explicit query structure
   const { data, error } = await supabase
     .from('users')
-    .select('plan_id, plans!inner(viewer_limit)')
+    .select('plan_id')
     .eq('id', userId)
     .single();
     
-  if (error || !data) {
-    console.error('Failed to fetch user plan limit:', error);
+  if (error || !data || !data.plan_id) {
+    console.error('Failed to fetch user plan:', error);
     return 0; // Default to 0 if no plan or error
   }
+
+  // Separate query to get the plan details
+  const { data: planData, error: planError } = await supabase
+    .from('plans')
+    .select('viewer_limit')
+    .eq('id', data.plan_id)
+    .single();
   
-  // Fix: Access the plans property more safely to avoid TypeScript issues
-  const plans = data.plans as unknown as { viewer_limit: number };
-  return plans?.viewer_limit || 0;
+  if (planError || !planData) {
+    console.error('Failed to fetch plan details:', planError);
+    return 0;
+  }
+  
+  return planData.viewer_limit;
 };
 
 // Check if user can start more viewers
