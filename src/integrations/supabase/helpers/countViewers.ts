@@ -9,26 +9,18 @@ import { supabase } from '../client';
  */
 export async function countRunningViewers(userId: string): Promise<number> {
   try {
-    // Separate the builder to avoid TS's deep instantiation bug
-    const query = supabase
+    const result = await (supabase
       .from('viewers')
-      .select('id', { count: 'exact', head: true }); // use 'id' instead of '*' for minimal columns
-
-    // Apply type assertion after the query is complete rather than in the chain
-    const result = await query
+      .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
-      .eq('status', 'running');
-      
-    // Safely extract count from the result
-    const count = (result as any).count;
-    const error = (result as any).error;
+      .eq('status', 'running')) as unknown as { count: number | null; error: any };
 
-    if (error) {
-      console.error('Error while counting viewers:', error);
+    if (result.error) {
+      console.error('Error while counting viewers:', result.error);
       return 0;
     }
 
-    return count ?? 0;
+    return result.count ?? 0;
   } catch (error) {
     console.error('Unexpected error counting viewers:', error);
     return 0;
