@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { useApp } from '@/context/AppContext';
+import { useAppContext } from '@/context/AppContext';
 import { Server, Monitor, Globe, AlertTriangle, RefreshCw } from 'lucide-react';
 import StatsCard from './StatsCard';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -10,7 +10,7 @@ import { toast } from '@/components/ui/sonner';
 import GlobalErrorDisplay from './GlobalErrorDisplay';
 
 const StatusDashboard = () => {
-  const { slaves, viewers, proxies, logs, isLoading, resetToDefaults } = useApp();
+  const { slaves, viewers, proxies, logs, isLoading, resetToDefaults } = useAppContext();
   const [supabaseStatus, setSupabaseStatus] = useState<'online' | 'offline' | 'checking'>('checking');
   
   const activeSlaves = slaves.filter(slave => slave.status === 'online').length;

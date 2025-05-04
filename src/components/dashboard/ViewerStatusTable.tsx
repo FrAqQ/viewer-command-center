@@ -4,7 +4,7 @@ import { ViewerInstance } from '@/types';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { X, Image } from 'lucide-react';
-import { useApp } from '@/context/AppContext';
+import { useAppContext } from '@/context/AppContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { getViewerScreenshot } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/sonner';
@@ -15,7 +15,7 @@ interface ViewerStatusTableProps {
 }
 
 const ViewerStatusTable: React.FC<ViewerStatusTableProps> = ({ viewers, onStopViewer }) => {
-  const { slaves } = useApp();
+  const { slaves } = useAppContext();
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
   const [screenshotDialogOpen, setScreenshotDialogOpen] = useState(false);
   const [isLoadingScreenshot, setIsLoadingScreenshot] = useState(false);

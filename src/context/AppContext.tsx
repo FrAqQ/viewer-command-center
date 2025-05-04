@@ -43,7 +43,8 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const useLocalStorage = <T>(key: string, initialValue: T) => {
+// Fix: Move the generic function outside of JSX context and use a type parameter placeholder
+function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val: T) => T)) => void] {
   const [storedValue, setStoredValue] = useState<T>(() => {
     try {
       const item = window.localStorage.getItem(key);
@@ -65,8 +66,8 @@ const useLocalStorage = <T>(key: string, initialValue: T) => {
     }
   };
 
-  return [storedValue, setValue] as const;
-};
+  return [storedValue, setValue];
+}
 
 const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   const [slaves, setSlaves] = useState<SlaveServer[]>([]);
