@@ -335,19 +335,16 @@ export type Database = {
           email: string | null
           id: string
           plan_id: string | null
-          viewers_active: number | null
         }
         Insert: {
           email?: string | null
           id: string
           plan_id?: string | null
-          viewers_active?: number | null
         }
         Update: {
           email?: string | null
           id?: string
           plan_id?: string | null
-          viewers_active?: number | null
         }
         Relationships: [
           {
@@ -399,32 +396,6 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "viewer_logs_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      viewer_sessions: {
-        Row: {
-          id: string
-          timestamp: string | null
-          user_id: string | null
-        }
-        Insert: {
-          id?: string
-          timestamp?: string | null
-          user_id?: string | null
-        }
-        Update: {
-          id?: string
-          timestamp?: string | null
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "viewer_sessions_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
