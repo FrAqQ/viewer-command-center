@@ -10,18 +10,18 @@ import { supabase } from '../client';
 export async function countRunningViewers(userId: string): Promise<number> {
   try {
     // Use '*' column instead of empty string to prevent deep type instantiation
-    const { count, error } = await supabase
+    const response = await supabase
       .from('viewers')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', userId)
-      .eq('status', 'running');
+      .eq('status', 'running') as unknown as { count: number | null; error: any };
 
-    if (error) {
-      console.error('Error while counting viewers:', error);
+    if (response.error) {
+      console.error('Error while counting viewers:', response.error);
       return 0;
     }
 
-    return count || 0;
+    return response.count || 0;
   } catch (error) {
     console.error('Unexpected error counting viewers:', error);
     return 0;
