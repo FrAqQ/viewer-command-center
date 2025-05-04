@@ -185,15 +185,15 @@ export const canStartViewers = async (userId: string, requestedViewers: number =
   // Get plan limit
   const limit = await getUserPlanLimit(userId);
   
-  // Use count properly with type assertion to avoid excessive type instantiation
+  // Use count properly with explicit any type to avoid excessive type instantiation
   const response = await supabase
     .from('viewers')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .eq('status', 'running');
+    .eq('status', 'running') as any;
   
-  // Access count from the response object, not from data
-  const count = (response as any).count || 0;
+  // Access count from the response object
+  const count = response.count || 0;
   
   if (response.error) {
     console.error('Error checking active viewers:', response.error);
@@ -207,15 +207,15 @@ export const canStartViewers = async (userId: string, requestedViewers: number =
 export const getRemainingViewers = async (userId: string): Promise<number> => {
   const limit = await getUserPlanLimit(userId);
   
-  // Use count properly with type assertion to avoid excessive type instantiation
+  // Use count properly with explicit any type to avoid excessive type instantiation
   const response = await supabase
     .from('viewers')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .eq('status', 'running');
+    .eq('status', 'running') as any;
   
-  // Access count from the response object, not from data
-  const count = (response as any).count || 0;
+  // Access count from the response object
+  const count = response.count || 0;
   
   if (response.error) {
     console.error('Error checking remaining viewers:', response.error);
