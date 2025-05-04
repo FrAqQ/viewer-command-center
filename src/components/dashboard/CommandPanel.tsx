@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SlaveServer, Command } from '@/types';
 import { useApp } from '@/context/AppContext';
-import { PlayCircle, RefreshCw, StopCircle } from 'lucide-react';
+import { PlayCircle, RefreshCw, StopCircle, Loader2 } from 'lucide-react';
 import { getProxyUrlById, getRandomValidProxy } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/sonner';
 
@@ -148,10 +148,13 @@ const CommandPanel: React.FC<CommandPanelProps> = ({ slaves }) => {
           <Button 
             className="h-10" 
             onClick={() => handleSendCommand('spawn')} 
-            disabled={!url || isLoading}
-            isLoading={isLoading}
+            disabled={isLoading || !url}
           >
-            <PlayCircle className="h-4 w-4 mr-1" />
+            {isLoading ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <PlayCircle className="h-4 w-4 mr-1" />
+            )}
             Start
           </Button>
         </div>

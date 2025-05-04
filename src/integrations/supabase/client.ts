@@ -61,18 +61,32 @@ export const getRandomValidProxy = async (): Promise<string | null> => {
 
 // Fetch screenshot for a viewer
 export const getViewerScreenshot = async (viewerId: string): Promise<string | null> => {
-  const { data, error } = await supabase
+  // First check if the column exists by doing a metadata query
+  const { data: metaData, error: metaError } = await supabase
     .from('viewers')
-    .select('screenshot')
+    .select('error') // Select any valid column just to check if the table exists
     .eq('id', viewerId)
-    .single();
+    .limit(1);
     
-  if (error || !data || !data.screenshot) {
-    console.error('Error fetching viewer screenshot:', error);
+  if (metaError) {
+    console.error('Error accessing viewers table:', metaError);
     return null;
   }
   
-  return data.screenshot;
+  // Now try to get the screenshot, but handle the case where the column doesn't exist
+  try {
+    const { data, error } = await supabase.rpc('get_viewer_screenshot', { viewer_id: viewerId });
+    
+    if (error) {
+      console.error('Error fetching viewer screenshot via RPC:', error);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Screenshot functionality not available:', error);
+    return null;
+  }
 };
 
 // Send command to slaves
@@ -102,4 +116,3 @@ export const sendCommand = async (command: {
   
   return data.id;
 };
-
