@@ -83,8 +83,29 @@ async function handleStatusUpdate(slaveId: string, slaveName: string, data: any)
 
   const { status, metrics } = data
   
-  // Generate a UUID if not provided (for new slaves)
-  const effectiveSlaveId = slaveId || crypto.randomUUID()
+  // More robust slave ID handling - check if a slave with this name already exists
+  let effectiveSlaveId = slaveId;
+  
+  if (!effectiveSlaveId) {
+    // Check if a slave with the same name already exists
+    const { data: existingSlave, error: lookupError } = await supabaseClient
+      .from('slaves')
+      .select('id')
+      .eq('name', slaveName)
+      .maybeSingle();
+      
+    if (lookupError) {
+      console.log('Error looking up existing slave:', lookupError.message);
+    }
+      
+    if (existingSlave?.id) {
+      console.log(`Found existing slave with name ${slaveName}, using ID: ${existingSlave.id}`);
+      effectiveSlaveId = existingSlave.id;
+    } else {
+      effectiveSlaveId = crypto.randomUUID(); // New UUID only if no existing slave with this name
+      console.log(`No existing slave found with name ${slaveName}, generating new ID: ${effectiveSlaveId}`);
+    }
+  }
 
   // Use upsert with conflict target on id
   const { data: upsertedSlave, error: upsertError } = await supabaseClient
@@ -110,7 +131,7 @@ async function handleStatusUpdate(slaveId: string, slaveName: string, data: any)
   }
 
   // Only log first registration, not subsequent updates
-  if (!slaveId) {
+  if (slaveId !== effectiveSlaveId) {
     await supabaseClient
       .from('logs')
       .insert({
@@ -175,4 +196,3 @@ async function checkColumnExists(tableName: string, columnName: string): Promise
   
   return data === true
 }
-
