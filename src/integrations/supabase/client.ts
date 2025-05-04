@@ -185,6 +185,7 @@ export const canStartViewers = async (userId: string, requestedViewers: number =
   const limit = await getUserPlanLimit(userId);
   
   // Get current active viewers count with explicit type annotation
+  type CountResult = { count: number | null };
   const { count, error } = await supabase
     .from('viewers')
     .select('*', { count: 'exact', head: true })
