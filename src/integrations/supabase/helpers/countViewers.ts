@@ -14,9 +14,14 @@ export async function countRunningViewers(userId: string): Promise<number> {
       .from('viewers')
       .select('id', { count: 'exact', head: true }); // use 'id' instead of '*' for minimal columns
 
-    const { count, error } = await query
+    // Apply type assertion after the query is complete rather than in the chain
+    const result = await query
       .eq('user_id', userId)
-      .eq('status', 'running') as unknown as { count: number | null; error: any };
+      .eq('status', 'running');
+      
+    // Safely extract count from the result
+    const count = (result as any).count;
+    const error = (result as any).error;
 
     if (error) {
       console.error('Error while counting viewers:', error);
