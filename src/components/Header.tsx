@@ -8,10 +8,10 @@ import {
   DropdownMenuItem, 
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
-import { useApp } from '@/context/AppContext';
+import { useAppContext } from '@/context/AppContext';
 
 const Header = () => {
-  const { logs } = useApp();
+  const { logs } = useAppContext();
   const errorsCount = logs.filter(log => log.level === 'error').length;
   const warningsCount = logs.filter(log => log.level === 'warning').length;
   

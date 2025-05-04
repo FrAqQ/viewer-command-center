@@ -1,6 +1,5 @@
-
 import React from 'react';
-import { useApp } from '@/context/AppContext';
+import { useAppContext } from '@/context/AppContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Shield } from 'lucide-react';
 
@@ -15,7 +14,7 @@ const RoleGuard: React.FC<RoleGuardProps> = ({
   requiredRole = 'admin',
   fallback 
 }) => {
-  const { user, userRoles } = useApp();
+  const { user, userRoles } = useAppContext();
   
   // If no user is logged in, show the fallback or default message
   if (!user) {

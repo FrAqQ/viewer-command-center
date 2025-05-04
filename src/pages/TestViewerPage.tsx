@@ -1,6 +1,6 @@
-
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import Layout from '@/components/Layout';
+import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,15 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ViewerInstance, Proxy } from '@/types';
-import { useApp } from '@/context/AppContext';
-import { PlayCircle, Plus, Minus, StopCircle, Loader2, Trash2, RefreshCw } from 'lucide-react';
-import { Skeleton } from '@/components/ui/skeleton';
-import { toast } from '@/components/ui/sonner';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { supabase, getProxyUrlById } from '@/integrations/supabase/client';
 
 const TestViewerPage = () => {
-  const { addViewer, removeViewer, updateViewer, viewers, proxies, slaves, isLoading, addCommand } = useApp();
+  const { addViewer, removeViewer, updateViewer, viewers, proxies, slaves, isLoading, addCommand } = useAppContext();
   const [url, setUrl] = useState('https://twitch.tv/');
   const [selectedProxyId, setSelectedProxyId] = useState<string>('');
   const [selectedSlaveId, setSelectedSlaveId] = useState<string>('');

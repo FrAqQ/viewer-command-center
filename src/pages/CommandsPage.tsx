@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import Layout from '@/components/Layout';
-import { useApp } from '@/context/AppContext';
+import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -26,7 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 
 const CommandsPage = () => {
-  const { commands, slaves, addCommand, updateCommand, isLoading } = useApp();
+  const { commands, slaves, addCommand, updateCommand, isLoading } = useAppContext();
   const [showNewCommandDialog, setShowNewCommandDialog] = useState(false);
   
   const pendingCommands = commands.filter(cmd => cmd.status === 'pending');

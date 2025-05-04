@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState } from 'react';
 import { useAppContext } from '@/context/AppContext';
 import { Server, Monitor, Globe, AlertTriangle, RefreshCw } from 'lucide-react';
@@ -194,7 +193,12 @@ const StatusDashboard = () => {
           icon={<AlertTriangle className="h-4 w-4" />} 
           description="Errors in the last 24h"
           className={errors > 0 ? "border-status-danger border-2" : ""}
-          onClick={() => document.querySelector('[data-dialog-trigger="global-errors"]')?.click()}
+          onClick={() => {
+            const errorDialogTrigger = document.querySelector('[data-dialog-trigger="global-errors"]');
+            if (errorDialogTrigger) {
+              (errorDialogTrigger as HTMLElement).click();
+            }
+          }}
         />
       </div>
     </div>

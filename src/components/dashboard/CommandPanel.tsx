@@ -1,11 +1,10 @@
-
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { SlaveServer, Command } from '@/types';
-import { useApp } from '@/context/AppContext';
+import { useAppContext } from '@/context/AppContext';
 import { PlayCircle, RefreshCw, StopCircle, Loader2 } from 'lucide-react';
 import { getProxyUrlById, getRandomValidProxy } from '@/integrations/supabase/client';
 import { toast } from '@/components/ui/sonner';
@@ -15,7 +14,7 @@ interface CommandPanelProps {
 }
 
 const CommandPanel: React.FC<CommandPanelProps> = ({ slaves }) => {
-  const { addCommand, proxies } = useApp();
+  const { addCommand, proxies } = useAppContext();
   const [url, setUrl] = useState('');
   const [slaveId, setSlaveId] = useState<string>('all');
   const [viewerCount, setViewerCount] = useState(1);

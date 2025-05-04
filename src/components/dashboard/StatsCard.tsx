@@ -13,6 +13,7 @@ interface StatsCardProps {
     positive: boolean;
   };
   className?: string;
+  onClick?: () => void; // Add onClick prop
 }
 
 const StatsCard: React.FC<StatsCardProps> = ({
@@ -22,9 +23,13 @@ const StatsCard: React.FC<StatsCardProps> = ({
   description,
   trend,
   className,
+  onClick, // Add onClick prop
 }) => {
   return (
-    <Card className={cn("overflow-hidden", className)}>
+    <Card 
+      className={cn("overflow-hidden", className, onClick ? "cursor-pointer" : "")} // Add cursor-pointer when onClick is provided
+      onClick={onClick} // Use onClick prop
+    >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium">{title}</CardTitle>
         <div className="h-4 w-4 text-muted-foreground">{icon}</div>

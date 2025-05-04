@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import Layout from '@/components/Layout';
 import StatusDashboard from '@/components/dashboard/StatusDashboard';
@@ -6,7 +5,7 @@ import SlaveStatusCard from '@/components/dashboard/SlaveStatusCard';
 import ViewerStatusTable from '@/components/dashboard/ViewerStatusTable';
 import LogsPanel from '@/components/dashboard/LogsPanel';
 import CommandPanel from '@/components/dashboard/CommandPanel';
-import { useApp } from '@/context/AppContext';
+import { useAppContext } from '@/context/AppContext';
 import { Command } from '@/types';
 import { toast } from '@/components/ui/sonner';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
@@ -18,7 +17,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { supabase } from '@/integrations/supabase/client';
 
 const Index = () => {
-  const { slaves, viewers, logs, addCommand, updateSlave, removeViewer, clearLogs } = useApp();
+  const { slaves, viewers, logs, addCommand, updateSlave, removeViewer, clearLogs } = useAppContext();
   const [apiKey, setApiKey] = useState<string>('');
   const [showApiKey, setShowApiKey] = useState<boolean>(false);
   

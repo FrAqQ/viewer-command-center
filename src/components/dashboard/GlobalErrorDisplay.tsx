@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
-import { useApp } from '@/context/AppContext';
-import { AlertTriangle, X } from 'lucide-react';
+import { useAppContext } from '@/context/AppContext';
+import { AlertTriangle, X, Image } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -9,7 +8,7 @@ import { getViewerScreenshot } from '@/integrations/supabase/client';
 import { LogEntry, ViewerInstance } from '@/types';
 
 const GlobalErrorDisplay: React.FC = () => {
-  const { logs, viewers } = useApp();
+  const { logs, viewers } = useAppContext();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
   const [viewerScreenshots, setViewerScreenshots] = useState<Record<string, string | null>>({});

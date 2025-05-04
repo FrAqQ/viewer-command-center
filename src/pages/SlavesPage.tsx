@@ -1,7 +1,6 @@
-
-import React, { useState } from 'react';
+import React from 'react';
 import Layout from '@/components/Layout';
-import { useApp } from '@/context/AppContext';
+import { useAppContext } from '@/context/AppContext';
 import { SlaveServer } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,7 +15,7 @@ import SetupGuide from '@/components/dashboard/SetupGuide';
 import SlaveEditDialog from '@/components/dashboard/SlaveEditDialog';
 
 const SlavesPage = () => {
-  const { slaves, updateSlave, removeSlave, isLoading } = useApp();
+  const { slaves, updateSlave, removeSlave, isLoading } = useAppContext();
   const [open, setOpen] = useState(false);
   const [selectedSlave, setSelectedSlave] = useState<SlaveServer | undefined>(undefined);
   

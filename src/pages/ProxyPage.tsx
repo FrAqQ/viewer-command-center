@@ -1,7 +1,6 @@
-
-import React, { useState } from 'react';
+import React from 'react';
 import Layout from '@/components/Layout';
-import { useApp } from '@/context/AppContext';
+import { useAppContext } from '@/context/AppContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const ProxyPage = () => {
-  const { proxies, addProxy, updateProxy, removeProxy, importProxies, isLoading } = useApp();
+  const { proxies, addProxy, updateProxy, removeProxy, importProxies, isLoading } = useAppContext();
   const [proxyUrl, setProxyUrl] = useState('');
   const [proxyText, setProxyText] = useState('');
   const [loading, setLoading] = useState(false);
