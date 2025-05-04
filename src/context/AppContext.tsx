@@ -1,4 +1,3 @@
-
 import React, {
   createContext,
   useState,
@@ -73,6 +72,7 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, (value: SetStateA
 }
 
 const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
+  // Hier bewusst leere Arrays setzen
   const [slaves, setSlaves] = useState<SlaveServer[]>([]);
   const [proxies, setProxies] = useState<Proxy[]>([]);
   const [viewers, setViewers] = useState<ViewerInstance[]>([]);
@@ -81,6 +81,8 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [user, setUser] = useState<any | null>(null);
   const [userRoles, setUserRoles] = useState<string[]>([]);
+  
+  // ... keep existing code (addSlave, updateSlave, removeSlave)
   
   const addSlave = (slave: Omit<SlaveServer, 'id'>) => {
     const newSlave: SlaveServer = { id: uuidv4(), ...slave };
@@ -97,6 +99,8 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
     setSlaves(prevSlaves => prevSlaves.filter(slave => slave.id !== id));
   };
 
+  // ... keep existing code (addProxy, updateProxy, removeProxy, checkProxy, checkAllProxies)
+  
   const addProxy = (proxy: Omit<Proxy, 'id'>) => {
     const newProxy: Proxy = { id: uuidv4(), ...proxy };
     setProxies(prevProxies => [...prevProxies, newProxy]);
@@ -113,6 +117,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   };
   
   const checkProxy = async (id: string) => {
+    // ... keep existing code (checkProxy implementation)
     const proxy = proxies.find(p => p.id === id);
     if (!proxy) return;
     
@@ -120,8 +125,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
     
     try {
       const controller = new AbortController();
-      // Store timeoutId in a separate variable to avoid the "Cannot find name 'timeoutId'" error
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
       
       const proxyUrl = proxy.username && proxy.password
         ? `http://${proxy.username}:${proxy.password}@${proxy.address}:${proxy.port}`
@@ -140,7 +144,6 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
       updateProxy(id, { valid: true, lastChecked: new Date().toISOString(), failCount: 0 });
       toast.success(`Proxy ${proxy.address}:${proxy.port} is valid`);
     } catch (error: any) {
-      // Using a local timeoutId to avoid the reference error
       const localTimeoutId = setTimeout(() => {}, 0);
       clearTimeout(localTimeoutId);
       console.error(`Proxy ${proxy.address}:${proxy.port} check failed:`, error);
@@ -162,6 +165,8 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
     }
   };
 
+  // ... keep existing code (addViewer, updateViewer, removeViewer, addLog, clearLogs)
+  
   const addViewer = (viewer: Omit<ViewerInstance, 'id'>) => {
     const newViewer: ViewerInstance = { id: uuidv4(), ...viewer };
     setViewers(prevViewers => [...prevViewers, newViewer]);
@@ -182,7 +187,6 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
       id: uuidv4(), 
       timestamp: new Date().toISOString(), 
       ...log,
-      // Ensure details is a proper Record if present
       details: log.details ? (
         typeof log.details === 'object' && log.details !== null ? log.details : { value: log.details }
       ) : {}
@@ -193,6 +197,8 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   const clearLogs = () => {
     setLogs([]);
   };
+
+  // ... keep existing code (addCommand, updateCommand, resetToDefaults, importProxies)
   
   const addCommand = async (command: Omit<Command, 'id' | 'timestamp' | 'status'>): Promise<string | null> => {
     const newCommand: Command = { 
@@ -202,7 +208,6 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
       ...command 
     };
     
-    // Update commands state
     setCommands(prevCommands => [...prevCommands, newCommand]);
     
     const { data, error } = await supabase
@@ -269,7 +274,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
           port,
           username,
           password,
-          valid: true, // Assume valid until checked
+          valid: true,
           lastChecked: new Date().toISOString(),
           failCount: 0
         });
@@ -293,8 +298,8 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
         if (slavesError) {
           console.error("Error fetching slaves:", slavesError);
           toast.error("Failed to load slaves from Supabase: " + slavesError.message);
-        } else if (slavesData) {
-          // Map the data to match our SlaveServer type
+        } else if (slavesData && slavesData.length > 0) {
+          // Nur laden, wenn tatsächlich Daten vorhanden sind
           const mappedSlaves: SlaveServer[] = slavesData.map(slave => ({
             id: slave.id,
             name: slave.name,
@@ -311,6 +316,8 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
           setSlaves(mappedSlaves);
         }
         
+        // ... keep existing code (load other data from Supabase)
+        
         // Load proxies from Supabase
         const { data: proxiesData, error: proxiesError } = await supabase
           .from('proxies')
@@ -319,8 +326,8 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
         if (proxiesError) {
           console.error("Error fetching proxies:", proxiesError);
           toast.error("Failed to load proxies from Supabase: " + proxiesError.message);
-        } else if (proxiesData) {
-          // Map the data to match our Proxy type
+        } else if (proxiesData && proxiesData.length > 0) {
+          // Nur laden, wenn tatsächlich Daten vorhanden sind
           const mappedProxies: Proxy[] = proxiesData.map(proxy => ({
             id: proxy.id,
             address: proxy.address,
@@ -341,8 +348,8 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
         if (viewersError) {
           console.error("Error fetching viewers:", viewersError);
           toast.error("Failed to load viewers from Supabase: " + viewersError.message);
-        } else if (viewersData) {
-          // Map the data to match our ViewerInstance type
+        } else if (viewersData && viewersData.length > 0) {
+          // Nur laden, wenn tatsächlich Daten vorhanden sind
           const mappedViewers: ViewerInstance[] = viewersData.map(viewer => ({
             id: viewer.id,
             url: viewer.url,
@@ -364,8 +371,8 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
         if (logsError) {
           console.error("Error fetching logs:", logsError);
           toast.error("Failed to load logs from Supabase: " + logsError.message);
-        } else if (logsData) {
-          // Map the data to match our LogEntry type
+        } else if (logsData && logsData.length > 0) {
+          // Nur laden, wenn tatsächlich Daten vorhanden sind
           const mappedLogs: LogEntry[] = logsData.map(log => ({
             id: log.id,
             level: (log.level as 'error' | 'info' | 'warning') || 'info',
@@ -377,7 +384,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
           setLogs(mappedLogs);
         }
 
-        // Load commands from Supabase with proper type handling
+        // Load commands from Supabase
         const { data: commandsData, error: commandsError } = await supabase
           .from('commands')
           .select('*')
@@ -386,8 +393,8 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
         if (commandsError) {
           console.error("Error fetching commands:", commandsError);
           toast.error("Failed to load commands from Supabase: " + commandsError.message);
-        } else if (commandsData) {
-          // Map the data to match our Command type with proper type handling for result
+        } else if (commandsData && commandsData.length > 0) {
+          // Nur laden, wenn tatsächlich Daten vorhanden sind
           const mappedCommands: Command[] = commandsData.map(cmd => {
             // Create base command object
             const commandObj: Command = {
@@ -423,6 +430,8 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
     loadData();
   }, []);
 
+  // ... keep existing code (authentication handling)
+  
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {

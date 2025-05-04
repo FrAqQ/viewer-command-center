@@ -14,6 +14,7 @@ import { toast } from '@/components/ui/sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import SetupGuide from '@/components/dashboard/SetupGuide';
 import SlaveEditDialog from '@/components/dashboard/SlaveEditDialog';
+import SlaveStatusCard from '@/components/dashboard/SlaveStatusCard';
 
 const SlavesPage = () => {
   const { slaves, updateSlave, removeSlave, isLoading } = useAppContext();
