@@ -391,10 +391,10 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
             id: cmd.id,
             type: cmd.type as 'spawn' | 'stop' | 'update_proxy' | 'reconnect' | 'custom',
             target: cmd.target,
-            payload: typeof cmd.payload === 'object' ? cmd.payload as Record<string, any> : { value: cmd.payload },
+            payload: typeof cmd.payload === 'object' && cmd.payload !== null ? cmd.payload as Record<string, any> : { value: cmd.payload },
             timestamp: cmd.timestamp,
             status: (cmd.status as 'pending' | 'executed' | 'failed') || 'pending',
-            result: cmd.result ? (typeof cmd.result === 'object' ? cmd.result : { value: cmd.result }) : {}
+            result: cmd.result !== undefined ? (typeof cmd.result === 'object' && cmd.result !== null ? cmd.result as Record<string, any> : { value: cmd.result }) : undefined
           }));
           setCommands(mappedCommands);
         }
