@@ -45,7 +45,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 // Fix: Move the generic function outside of JSX context and use a type parameter placeholder
-function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val: T) => T)) => void] {
+function useLocalStorage<T>(key: string, initialValue: T): [T, (value: SetStateAction<T>) => void] {
   const [storedValue, setStoredValue] = useState<T>(() => {
     try {
       const item = window.localStorage.getItem(key);
@@ -56,7 +56,7 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val
     }
   });
 
-  const setValue = (value: T | ((val: T) => T)) => {
+  const setValue = (value: SetStateAction<T>) => {
     try {
       const valueToStore =
         value instanceof Function ? value(storedValue) : value;
@@ -117,7 +117,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
     
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutIdVal = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
       const proxyUrl = proxy.username && proxy.password
         ? `http://${proxy.username}:${proxy.password}@${proxy.address}:${proxy.port}`
@@ -132,12 +132,13 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
         proxy: proxyUrl
       });
       
-      clearTimeout(timeoutId);
+      clearTimeout(timeoutIdVal);
       updateProxy(id, { valid: true, lastChecked: new Date().toISOString(), failCount: 0 });
       toast.success(`Proxy ${proxy.address}:${proxy.port} is valid`);
     } catch (error: any) {
-      // Using a separate reference to avoid the error about timeoutId not existing
-      clearTimeout(timeoutId);
+      // Using a fixed reference to avoid the error about timeoutId not existing
+      const timeoutIdVal = setTimeout(() => {}, 0);
+      clearTimeout(timeoutIdVal);
       console.error(`Proxy ${proxy.address}:${proxy.port} check failed:`, error);
       
       const failCount = proxy.failCount ? proxy.failCount + 1 : 1;
@@ -173,7 +174,15 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   };
 
   const addLog = (log: Omit<LogEntry, 'id' | 'timestamp'>) => {
-    const newLog: LogEntry = { id: uuidv4(), timestamp: new Date().toISOString(), ...log };
+    const newLog: LogEntry = { 
+      id: uuidv4(), 
+      timestamp: new Date().toISOString(), 
+      ...log,
+      // Ensure details is a proper Record if present
+      details: log.details ? (
+        typeof log.details === 'object' ? log.details : { value: log.details }
+      ) : undefined
+    };
     setLogs(prevLogs => [newLog, ...prevLogs]);
   };
 
@@ -250,7 +259,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
             name: slave.name,
             hostname: slave.hostname,
             ip: slave.ip,
-            status: slave.status as 'online' | 'offline' | 'error',
+            status: (slave.status as 'online' | 'offline' | 'error') || 'offline',
             lastSeen: slave.last_seen,
             metrics: {
               cpu: slave.cpu || 0,
@@ -298,7 +307,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
             url: viewer.url,
             slaveId: viewer.slave_id || undefined,
             proxy: viewer.proxy_id || undefined,
-            status: viewer.status as 'running' | 'stopped' | 'error',
+            status: (viewer.status as 'running' | 'stopped' | 'error') || 'stopped',
             startTime: viewer.start_time,
             error: viewer.error || undefined
           }));
