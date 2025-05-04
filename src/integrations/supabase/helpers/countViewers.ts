@@ -9,11 +9,14 @@ import { supabase } from '../client';
  */
 export async function countRunningViewers(userId: string): Promise<number> {
   try {
-    const result = await (supabase
+    // Explizit als any typisieren, um das TypeScript-Problem mit übermäßig tiefer Typinstanziierung zu umgehen
+    const query: any = supabase
       .from('viewers')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
-      .eq('status', 'running')) as unknown as { count: number | null; error: any };
+      .eq('status', 'running');
+
+    const result = await query;
 
     if (result.error) {
       console.error('Error while counting viewers:', result.error);
