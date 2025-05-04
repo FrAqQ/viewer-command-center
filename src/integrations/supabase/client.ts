@@ -75,14 +75,25 @@ export const getViewerScreenshot = async (viewerId: string): Promise<string | nu
   
   // Now try to get the screenshot, but handle the case where the column doesn't exist
   try {
-    const { data, error } = await supabase.rpc('get_viewer_screenshot', { viewer_id: viewerId });
+    // Instead of using RPC which seems to have type issues, let's directly query the database
+    const { data, error } = await supabase
+      .from('viewers')
+      .select('*')
+      .eq('id', viewerId)
+      .single();
     
     if (error) {
-      console.error('Error fetching viewer screenshot via RPC:', error);
+      console.error('Error fetching viewer data:', error);
       return null;
     }
     
-    return data;
+    // Check if the data has a screenshot property
+    if (data && 'screenshot' in data) {
+      return data.screenshot as string;
+    } else {
+      console.log('Viewer found but screenshot is not available');
+      return null;
+    }
   } catch (error) {
     console.error('Screenshot functionality not available:', error);
     return null;
