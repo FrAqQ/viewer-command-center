@@ -9,15 +9,12 @@ import { supabase } from '../client';
  */
 export async function countRunningViewers(userId: string): Promise<number> {
   try {
-    // First extract the query to prevent deep type instantiation
-    const query = supabase
+    // Use 'id' column instead of empty string to prevent deep type instantiation
+    const response = await supabase
       .from('viewers')
-      .select('', { count: 'exact', head: true })
+      .select('id', { count: 'exact', head: true })
       .eq('user_id', userId)
       .eq('status', 'running');
-
-    // Then cast to any to avoid TypeScript analyzing the complex return type
-    const response = await query as any;
 
     if (response?.error) {
       console.error('Error while counting viewers:', response.error);
