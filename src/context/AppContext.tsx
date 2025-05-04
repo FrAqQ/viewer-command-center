@@ -119,6 +119,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
     
     try {
       const controller = new AbortController();
+      // Store timeoutId in a separate variable to avoid the "Cannot find name 'timeoutId'" error
       const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
       const proxyUrl = proxy.username && proxy.password
@@ -138,9 +139,9 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
       updateProxy(id, { valid: true, lastChecked: new Date().toISOString(), failCount: 0 });
       toast.success(`Proxy ${proxy.address}:${proxy.port} is valid`);
     } catch (error: any) {
-      // Using a fixed reference to avoid the error about timeoutId not existing
-      const timeoutId = setTimeout(() => {}, 0);
-      clearTimeout(timeoutId);
+      // Using a local timeoutId to avoid the reference error
+      const localTimeoutId = setTimeout(() => {}, 0);
+      clearTimeout(localTimeoutId);
       console.error(`Proxy ${proxy.address}:${proxy.port} check failed:`, error);
       
       const failCount = proxy.failCount ? proxy.failCount + 1 : 1;
@@ -375,7 +376,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
           setLogs(mappedLogs);
         }
 
-        // Load commands from Supabase
+        // Load commands from Supabase - Fix the payload and result type issues
         const { data: commandsData, error: commandsError } = await supabase
           .from('commands')
           .select('*')
@@ -390,10 +391,10 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
             id: cmd.id,
             type: cmd.type as 'spawn' | 'stop' | 'update_proxy' | 'reconnect' | 'custom',
             target: cmd.target,
-            payload: cmd.payload || {},
+            payload: typeof cmd.payload === 'object' ? cmd.payload as Record<string, any> : { value: cmd.payload },
             timestamp: cmd.timestamp,
             status: (cmd.status as 'pending' | 'executed' | 'failed') || 'pending',
-            result: cmd.result
+            result: cmd.result ? (typeof cmd.result === 'object' ? cmd.result : { value: cmd.result }) : {}
           }));
           setCommands(mappedCommands);
         }
