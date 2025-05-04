@@ -189,18 +189,18 @@ export const canStartViewers = async (userId: string, requestedViewers: number =
   type QueryResult = { count: number | null };
   
   // Get current active viewers count with explicit type casting
-  const { count, error } = await supabase
+  const { data, error } = await supabase
     .from('viewers')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .eq('status', 'running') as { count: number | null, error: any };
+    .eq('status', 'running') as unknown as { data: null, count: number | null, error: any };
   
   if (error) {
     console.error('Error checking active viewers:', error);
     return false;
   }
   
-  const currentViewers = count || 0;
+  const currentViewers = data?.count || 0;
   return currentViewers + requestedViewers <= limit;
 };
 
@@ -209,18 +209,18 @@ export const getRemainingViewers = async (userId: string): Promise<number> => {
   const limit = await getUserPlanLimit(userId);
   
   // Fix excessive type instantiation by using explicit type annotation
-  const { count, error } = await supabase
+  const { data, error } = await supabase
     .from('viewers')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .eq('status', 'running') as { count: number | null, error: any };
+    .eq('status', 'running') as unknown as { data: null, count: number | null, error: any };
   
   if (error) {
     console.error('Error checking remaining viewers:', error);
     return 0;
   }
   
-  const currentViewers = count || 0;
+  const currentViewers = data?.count || 0;
   return Math.max(0, limit - currentViewers);
 };
 
