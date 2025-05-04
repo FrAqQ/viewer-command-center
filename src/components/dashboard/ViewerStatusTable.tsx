@@ -7,6 +7,7 @@ import { X, Image } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { getViewerScreenshot } from '@/integrations/supabase/client';
+import { toast } from '@/components/ui/sonner';
 
 interface ViewerStatusTableProps {
   viewers: ViewerInstance[];
@@ -48,9 +49,12 @@ const ViewerStatusTable: React.FC<ViewerStatusTableProps> = ({ viewers, onStopVi
       setSelectedScreenshot(screenshotData);
       if (screenshotData) {
         setScreenshotDialogOpen(true);
+      } else {
+        toast.error("No screenshot available for this viewer");
       }
     } catch (error) {
       console.error('Error loading screenshot:', error);
+      toast.error('Error loading screenshot');
     } finally {
       setIsLoadingScreenshot(false);
     }
@@ -93,7 +97,7 @@ const ViewerStatusTable: React.FC<ViewerStatusTableProps> = ({ viewers, onStopVi
                       variant="ghost"
                       className="h-8 w-8 p-0"
                       onClick={() => handleViewScreenshot(viewer.id)}
-                      disabled={isLoadingScreenshot || viewer.status === 'running'}
+                      disabled={isLoadingScreenshot}
                       title="View Screenshot"
                     >
                       <Image className="h-4 w-4" />

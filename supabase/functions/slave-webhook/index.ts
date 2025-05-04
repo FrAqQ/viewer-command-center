@@ -47,7 +47,7 @@ serve(async (req) => {
 
     // Parse request body
     const requestBody = await req.json()
-    console.log('Received webhook payload:', JSON.stringify(requestBody))
+    console.log('Received webhook payload type:', requestBody.type)
 
     // Handle different webhook types
     const { type, slaveId, slaveName, data } = requestBody
@@ -210,18 +210,27 @@ async function handleViewerUpdate(slaveId: string, data: any) {
       .eq('id', id)
       .maybeSingle()
 
+    // Check if the screenshot column exists
+    const hasScreenshotColumn = await checkColumnExists('viewers', 'screenshot')
+
     let result
     
     if (existingViewer) {
       // Update existing viewer
+      const updateData: any = {
+        slave_id: slaveId,
+        status: status,
+        error: error || null
+      }
+      
+      // Only add screenshot if the column exists and screenshot is provided
+      if (hasScreenshotColumn && screenshot) {
+        updateData.screenshot = screenshot
+      }
+      
       const { data: updatedViewer, error: updateError } = await supabaseClient
         .from('viewers')
-        .update({
-          slave_id: slaveId,
-          status: status,
-          error: error || null,
-          ...(screenshot ? { screenshot } : {}),
-        })
+        .update(updateData)
         .eq('id', id)
         .select()
 
@@ -233,17 +242,23 @@ async function handleViewerUpdate(slaveId: string, data: any) {
       result = updatedViewer
     } else {
       // Insert new viewer
+      const insertData: any = {
+        id,
+        slave_id: slaveId,
+        url,
+        proxy,
+        status,
+        error: error || null
+      }
+      
+      // Only add screenshot if the column exists and screenshot is provided
+      if (hasScreenshotColumn && screenshot) {
+        insertData.screenshot = screenshot
+      }
+      
       const { data: newViewer, error: insertError } = await supabaseClient
         .from('viewers')
-        .insert({
-          id,
-          slave_id: slaveId,
-          url,
-          proxy,
-          status,
-          error: error || null,
-          ...(screenshot ? { screenshot } : {}),
-        })
+        .insert(insertData)
         .select()
 
       if (insertError) {
@@ -268,6 +283,43 @@ async function handleViewerUpdate(slaveId: string, data: any) {
       'Content-Type': 'application/json'
     }
   })
+}
+
+// Helper to check if a column exists in a table
+async function checkColumnExists(tableName: string, columnName: string): Promise<boolean> {
+  const { data, error } = await supabaseClient
+    .rpc('check_column_exists', { 
+      table_name: tableName, 
+      column_name: columnName 
+    })
+  
+  if (error) {
+    console.error('Error checking column existence:', error)
+    
+    // Fall back to a direct query if the function doesn't exist
+    try {
+      // Try with a direct query to information_schema
+      const { data: schemaData, error: schemaError } = await supabaseClient
+        .from('information_schema.columns')
+        .select('column_name')
+        .eq('table_schema', 'public')
+        .eq('table_name', tableName)
+        .eq('column_name', columnName)
+        .maybeSingle()
+      
+      if (schemaError) {
+        console.error('Error querying information_schema:', schemaError)
+        return false
+      }
+      
+      return schemaData !== null
+    } catch (e) {
+      console.error('Failed to check column existence:', e)
+      return false
+    }
+  }
+  
+  return data === true
 }
 
 // Handler for log entries

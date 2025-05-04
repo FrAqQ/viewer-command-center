@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/sonner';
+import GlobalErrorDisplay from './GlobalErrorDisplay';
 
 const StatusDashboard = () => {
   const { slaves, viewers, proxies, logs, isLoading, resetToDefaults } = useApp();
@@ -160,35 +161,42 @@ const StatusDashboard = () => {
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <StatsCard 
-        title="Slaves Online" 
-        value={`${activeSlaves}/${slaves.length}`} 
-        icon={<Server className="h-4 w-4" />} 
-        description="Active slave servers"
-        trend={trends.slaves}
-      />
-      <StatsCard 
-        title="Active Viewers" 
-        value={`${activeViewers}/${viewers.length}`} 
-        icon={<Monitor className="h-4 w-4" />} 
-        description="Running viewer instances"
-        trend={trends.viewers}
-      />
-      <StatsCard 
-        title="Valid Proxies" 
-        value={`${validProxies}/${proxies.length}`} 
-        icon={<Globe className="h-4 w-4" />} 
-        description="Working proxy connections"
-        trend={trends.proxies}
-      />
-      <StatsCard 
-        title="System Issues" 
-        value={errors} 
-        icon={<AlertTriangle className="h-4 w-4" />} 
-        description="Errors in the last 24h"
-        className={errors > 0 ? "border-status-danger border-2" : ""}
-      />
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <GlobalErrorDisplay />
+      </div>
+      
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatsCard 
+          title="Slaves Online" 
+          value={`${activeSlaves}/${slaves.length}`} 
+          icon={<Server className="h-4 w-4" />} 
+          description="Active slave servers"
+          trend={trends.slaves}
+        />
+        <StatsCard 
+          title="Active Viewers" 
+          value={`${activeViewers}/${viewers.length}`} 
+          icon={<Monitor className="h-4 w-4" />} 
+          description="Running viewer instances"
+          trend={trends.viewers}
+        />
+        <StatsCard 
+          title="Valid Proxies" 
+          value={`${validProxies}/${proxies.length}`} 
+          icon={<Globe className="h-4 w-4" />} 
+          description="Working proxy connections"
+          trend={trends.proxies}
+        />
+        <StatsCard 
+          title="System Issues" 
+          value={errors} 
+          icon={<AlertTriangle className="h-4 w-4" />} 
+          description="Errors in the last 24h"
+          className={errors > 0 ? "border-status-danger border-2" : ""}
+          onClick={() => document.querySelector('[data-dialog-trigger="global-errors"]')?.click()}
+        />
+      </div>
     </div>
   );
 };
