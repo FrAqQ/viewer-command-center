@@ -165,6 +165,30 @@ export type Database = {
         }
         Relationships: []
       }
+      plans: {
+        Row: {
+          created_at: string | null
+          id: string
+          name: string
+          price: number
+          viewer_limit: number
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          name: string
+          price: number
+          viewer_limit: number
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          name?: string
+          price?: number
+          viewer_limit?: number
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -306,6 +330,32 @@ export type Database = {
         }
         Relationships: []
       }
+      users: {
+        Row: {
+          email: string | null
+          id: string
+          plan_id: string | null
+        }
+        Insert: {
+          email?: string | null
+          id: string
+          plan_id?: string | null
+        }
+        Update: {
+          email?: string | null
+          id?: string
+          plan_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "users_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       viewer_counts: {
         Row: {
           updated_at: string
@@ -323,6 +373,35 @@ export type Database = {
           viewer_count?: number
         }
         Relationships: []
+      }
+      viewer_logs: {
+        Row: {
+          id: string
+          started_at: string | null
+          user_id: string | null
+          viewer_count: number | null
+        }
+        Insert: {
+          id?: string
+          started_at?: string | null
+          user_id?: string | null
+          viewer_count?: number | null
+        }
+        Update: {
+          id?: string
+          started_at?: string | null
+          user_id?: string | null
+          viewer_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "viewer_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       viewers: {
         Row: {

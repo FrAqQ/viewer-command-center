@@ -1,4 +1,3 @@
-
 export interface SlaveServer {
   id: string;
   name: string;
@@ -33,6 +32,7 @@ export interface ViewerInstance {
   startTime: string;
   error?: string;
   screenshot?: string;
+  userId?: string; // Add userId to track which user started the viewer
 }
 
 export interface Command {
@@ -42,7 +42,8 @@ export interface Command {
   payload: Record<string, any>;
   timestamp: string;
   status: 'pending' | 'executed' | 'failed';
-  result?: Record<string, any>; // Added the result property as optional
+  result?: Record<string, any>; 
+  userId?: string; // Add userId to track which user issued the command
 }
 
 export interface LogEntry {

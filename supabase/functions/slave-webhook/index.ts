@@ -1,198 +1,241 @@
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-import { serve } from "https://deno.land/std@0.177.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.32.0"
-
-console.log("Slave webhook function is running...")
-
-// CORS headers for browser clients
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key',
-  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+};
+
+const supabaseUrl = Deno.env.get('SUPABASE_URL') || '';
+const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+const apiSecretKey = Deno.env.get('API_SECRET_KEY') || '';
+
+const supabaseClient = createClient(supabaseUrl, supabaseServiceKey);
+
+// Helper function to check if a user can start more viewers
+async function canUserStartViewer(userId: string, count: number = 1): Promise<boolean> {
+  // If no userId provided, allow it (e.g., for admin/test viewers)
+  if (!userId) return true;
+  
+  try {
+    // Get user's plan limit
+    const { data: userData, error: userError } = await supabaseClient
+      .from('users')
+      .select('plan_id, plans!inner(viewer_limit)')
+      .eq('id', userId)
+      .single();
+      
+    if (userError || !userData || !userData.plans) {
+      console.error('Error fetching user plan:', userError);
+      return false;
+    }
+    
+    const planLimit = userData.plans.viewer_limit;
+    
+    // Count existing active viewers for this user
+    const { count: viewerCount, error: countError } = await supabaseClient
+      .from('viewers')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('status', 'running');
+      
+    if (countError) {
+      console.error('Error counting active viewers:', countError);
+      return false;
+    }
+    
+    const activeViewers = viewerCount || 0;
+    return activeViewers + count <= planLimit;
+  } catch (err) {
+    console.error('Error checking user viewer limit:', err);
+    return false;
+  }
 }
-
-// Create a Supabase client
-const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-const supabaseClient = createClient(supabaseUrl, supabaseServiceKey)
-
-// API Secret Key for authentication
-const API_SECRET_KEY = Deno.env.get('API_SECRET_KEY') ?? ''
 
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 204,
-      headers: corsHeaders,
-    })
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
-    // API Key authentication
-    const apiKey = req.headers.get('x-api-key')
-    
-    if (!apiKey || apiKey !== API_SECRET_KEY) {
-      console.error('Invalid or missing API key')
-      return new Response(JSON.stringify({ 
-        error: 'Unauthorized. Invalid or missing API key.' 
-      }), {
-        status: 401,
-        headers: { 
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      })
+    // Verify API key
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader || authHeader !== `Bearer ${apiSecretKey}`) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Parse request body
-    const requestBody = await req.json()
-    
-    // Extract common data from the request
-    const { id: slaveId, name: slaveName, hostname, ip, status = 'online', metrics = {} } = requestBody
-    console.log(`Received update from ${slaveName} (${slaveId || 'new slave'})`)
+    const requestData = await req.json();
+    const { type, slaveId, data } = requestData;
 
-    // Handle the status update (main functionality for now)
-    return await handleStatusUpdate(slaveId, slaveName, { 
-      hostname,
-      ip,
-      status,
-      metrics
-    })
+    // Process based on webhook type
+    let responseData;
     
+    if (type === 'status_update') {
+      // Update slave status
+      const { status, hostname, ip, metrics } = data;
+      
+      const { data: slave, error } = await supabaseClient
+        .from('slaves')
+        .upsert({
+          id: slaveId,
+          name: slaveId, // Use ID as name if not provided
+          hostname: hostname || 'unknown',
+          ip: ip || '0.0.0.0',
+          status,
+          last_seen: new Date().toISOString(),
+          cpu: metrics?.cpu || 0,
+          ram: metrics?.ram || 0,
+          instances: metrics?.instances || 0
+        })
+        .select()
+        .single();
+        
+      if (error) {
+        console.error('Error updating slave status:', error);
+        responseData = { success: false, error: error.message };
+      } else {
+        responseData = { success: true, slave };
+      }
+    } 
+    else if (type === 'viewer_update') {
+      // Update viewer statuses
+      const { viewers } = data;
+      
+      if (!Array.isArray(viewers)) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid viewers data' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      const updates = await Promise.all(viewers.map(async (viewer) => {
+        const { id, url, status, error: viewerError, screenshot } = viewer;
+        
+        // Update the viewer in the database
+        const { data, error } = await supabaseClient
+          .from('viewers')
+          .update({
+            status,
+            error: viewerError || null,
+            screenshot: screenshot || null
+          })
+          .eq('id', id)
+          .select()
+          .single();
+          
+        return { id, success: !error, data, error };
+      }));
+      
+      responseData = { success: true, updates };
+    } 
+    else if (type === 'log_entry') {
+      // Store log entry
+      const { level, message, details } = data;
+      
+      const { data: log, error } = await supabaseClient
+        .from('logs')
+        .insert({
+          level,
+          message,
+          source: slaveId,
+          details,
+          timestamp: new Date().toISOString()
+        })
+        .select()
+        .single();
+        
+      if (error) {
+        console.error('Error storing log entry:', error);
+        responseData = { success: false, error: error.message };
+      } else {
+        responseData = { success: true, log };
+      }
+    } 
+    else if (type === 'command_result') {
+      // Update command status
+      const { commandId, status, result } = data;
+      
+      const { data: command, error } = await supabaseClient
+        .from('commands')
+        .update({
+          status,
+          result
+        })
+        .eq('id', commandId)
+        .select()
+        .single();
+        
+      if (error) {
+        console.error('Error updating command status:', error);
+        responseData = { success: false, error: error.message };
+      } else {
+        responseData = { success: true, command };
+      }
+    } 
+    else if (type === 'get_pending_commands') {
+      // Fetch pending commands for this slave
+      const { data: commands, error } = await supabaseClient
+        .from('commands')
+        .select('*')
+        .eq('status', 'pending')
+        .eq('target', slaveId);
+        
+      if (error) {
+        console.error('Error fetching pending commands:', error);
+        responseData = { success: false, error: error.message };
+      } else {
+        // Process each command to check if it can be executed
+        const processedCommands = await Promise.all(commands.map(async (command) => {
+          // For spawn commands, check if the user has reached their limit
+          if (command.type === 'spawn' && command.payload?.userId) {
+            const canStart = await canUserStartViewer(command.payload.userId);
+            if (!canStart) {
+              // Update command status to failed
+              await supabaseClient
+                .from('commands')
+                .update({
+                  status: 'failed',
+                  result: { error: 'User has reached their viewer limit' }
+                })
+                .eq('id', command.id);
+                
+              return { ...command, status: 'failed', canExecute: false };
+            }
+          }
+          
+          return { ...command, canExecute: true };
+        }));
+        
+        responseData = { 
+          success: true, 
+          commands: processedCommands.filter(cmd => cmd.canExecute) 
+        };
+      }
+    } 
+    else {
+      return new Response(
+        JSON.stringify({ error: 'Unknown webhook type' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Return success response
+    return new Response(
+      JSON.stringify(responseData),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   } catch (error) {
-    console.error('Error processing webhook:', error.message)
+    console.error('Error processing webhook:', error);
     
-    return new Response(JSON.stringify({
-      error: error.message
-    }), {
-      status: 400,
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'application/json'
-      }
-    })
+    // Return error response
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
-})
-
-// Handler for slave status updates
-async function handleStatusUpdate(slaveId: string, slaveName: string, data: any) {
-  if (!data || typeof data !== 'object') {
-    throw new Error('Invalid data payload for status_update')
-  }
-
-  const { status, metrics } = data
-  
-  // More robust slave ID handling - check if a slave with this name already exists
-  let effectiveSlaveId = slaveId;
-  
-  if (!effectiveSlaveId) {
-    // Check if a slave with the same name already exists
-    const { data: existingSlave, error: lookupError } = await supabaseClient
-      .from('slaves')
-      .select('id')
-      .eq('name', slaveName)
-      .maybeSingle();
-      
-    if (lookupError) {
-      console.log('Error looking up existing slave:', lookupError.message);
-    }
-      
-    if (existingSlave?.id) {
-      console.log(`Found existing slave with name ${slaveName}, using ID: ${existingSlave.id}`);
-      effectiveSlaveId = existingSlave.id;
-    } else {
-      effectiveSlaveId = crypto.randomUUID(); // New UUID only if no existing slave with this name
-      console.log(`No existing slave found with name ${slaveName}, generating new ID: ${effectiveSlaveId}`);
-    }
-  }
-
-  // Use upsert with conflict target on id
-  const { data: upsertedSlave, error: upsertError } = await supabaseClient
-    .from('slaves')
-    .upsert([{
-      id: effectiveSlaveId,
-      name: slaveName,
-      hostname: data.hostname || 'Unknown',
-      ip: data.ip || '0.0.0.0',
-      status: status,
-      last_seen: new Date().toISOString(),
-      cpu: metrics?.cpu || 0,
-      ram: metrics?.ram || 0,
-      instances: metrics?.instances || 0
-    }], { 
-      onConflict: 'id' // Important: This ensures we update existing records
-    })
-    .select()
-
-  if (upsertError) {
-    console.error(`Error upserting slave:`, upsertError)
-    throw new Error(`Error upserting slave: ${upsertError.message}`)
-  }
-
-  // Only log first registration, not subsequent updates
-  if (slaveId !== effectiveSlaveId) {
-    await supabaseClient
-      .from('logs')
-      .insert({
-        level: 'info',
-        source: 'system',
-        message: `New slave registered: ${slaveName}`,
-        details: {
-          slaveId: effectiveSlaveId,
-          hostname: data.hostname || 'Unknown',
-          ip: data.ip || '0.0.0.0'
-        }
-      })
-  }
-
-  return new Response(JSON.stringify({ 
-    success: true, 
-    message: slaveId ? 'Status updated successfully' : 'New slave registered successfully',
-    id: effectiveSlaveId, // Return the ID (especially important for new slaves)
-    data: upsertedSlave
-  }), {
-    status: 200,
-    headers: {
-      ...corsHeaders,
-      'Content-Type': 'application/json'
-    }
-  })
-}
-
-// Helper to check if a column exists in a table
-async function checkColumnExists(tableName: string, columnName: string): Promise<boolean> {
-  const { data, error } = await supabaseClient
-    .rpc('check_column_exists', { 
-      table_name: tableName, 
-      column_name: columnName 
-    })
-  
-  if (error) {
-    console.error('Error checking column existence:', error)
-    
-    // Fall back to a direct query if the function doesn't exist
-    try {
-      // Try with a direct query to information_schema
-      const { data: schemaData, error: schemaError } = await supabaseClient
-        .from('information_schema.columns')
-        .select('column_name')
-        .eq('table_schema', 'public')
-        .eq('table_name', tableName)
-        .eq('column_name', columnName)
-        .maybeSingle()
-      
-      if (schemaError) {
-        console.error('Error querying information_schema:', schemaError)
-        return false
-      }
-      
-      return schemaData !== null
-    } catch (e) {
-      console.error('Failed to check column existence:', e)
-      return false
-    }
-  }
-  
-  return data === true
-}
+});

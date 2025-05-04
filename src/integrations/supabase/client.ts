@@ -149,3 +149,74 @@ export const sendCommand = async (command: {
   
   return data.id;
 };
+
+// Get user plan and viewer limit
+export const getUserPlanLimit = async (userId: string): Promise<number> => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('plan_id, plans!inner(viewer_limit)')
+    .eq('id', userId)
+    .single();
+    
+  if (error || !data || !data.plans) {
+    console.error('Failed to fetch user plan limit:', error);
+    return 0; // Default to 0 if no plan or error
+  }
+  
+  return data.plans.viewer_limit;
+};
+
+// Check if user can start more viewers
+export const canStartViewers = async (userId: string, requestedViewers: number = 1): Promise<boolean> => {
+  // Get plan limit
+  const limit = await getUserPlanLimit(userId);
+  
+  // Get current active viewers count
+  const { count, error } = await supabase
+    .from('viewers')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('status', 'running');
+  
+  if (error) {
+    console.error('Error checking active viewers:', error);
+    return false;
+  }
+  
+  const currentViewers = count || 0;
+  return currentViewers + requestedViewers <= limit;
+};
+
+// Get remaining viewers count for a user
+export const getRemainingViewers = async (userId: string): Promise<number> => {
+  const limit = await getUserPlanLimit(userId);
+  
+  const { count, error } = await supabase
+    .from('viewers')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .eq('status', 'running');
+  
+  if (error) {
+    console.error('Error checking remaining viewers:', error);
+    return 0;
+  }
+  
+  const currentViewers = count || 0;
+  return Math.max(0, limit - currentViewers);
+};
+
+// Log viewer usage
+export const logViewerUsage = async (userId: string, viewerCount: number): Promise<void> => {
+  const { error } = await supabase
+    .from('viewer_logs')
+    .insert({
+      user_id: userId,
+      viewer_count: viewerCount,
+      started_at: new Date().toISOString()
+    });
+  
+  if (error) {
+    console.error('Error logging viewer usage:', error);
+  }
+};

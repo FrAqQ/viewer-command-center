@@ -1,16 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useAppContext } from '@/context/AppContext';
-import { Server, Monitor, Globe, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Server, Monitor, Globe, AlertTriangle, RefreshCw, Users } from 'lucide-react';
 import StatsCard from './StatsCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/sonner';
 import GlobalErrorDisplay from './GlobalErrorDisplay';
+import { supabase, getRemainingViewers } from '@/integrations/supabase/client';
 
 const StatusDashboard = () => {
   const { slaves, viewers, proxies, logs, isLoading, resetToDefaults } = useAppContext();
   const [supabaseStatus, setSupabaseStatus] = useState<'online' | 'offline' | 'checking'>('checking');
+  const [userLimit, setUserLimit] = useState<number | null>(null);
+  const [remainingViewers, setRemainingViewers] = useState<number | null>(null);
   
   const activeSlaves = slaves.filter(slave => slave.status === 'online').length;
   const activeViewers = viewers.filter(viewer => viewer.status === 'running').length;
@@ -24,12 +27,10 @@ const StatusDashboard = () => {
     proxies: { value: 0, positive: true }
   });
 
-  // Check Supabase connection status
+  // Check Supabase connection status and fetch user plan info
   useEffect(() => {
     const checkSupabaseStatus = async () => {
       try {
-        const { supabase } = await import('@/integrations/supabase/client');
-        
         // Simple ping to check connection
         const { data, error } = await supabase.from('slaves').select('count').limit(1);
         
@@ -39,6 +40,14 @@ const StatusDashboard = () => {
           toast.error("Supabase connection failed: " + error.message);
         } else {
           setSupabaseStatus('online');
+          
+          // Fetch authenticated user info
+          const { data: userData } = await supabase.auth.getUser();
+          if (userData?.user?.id) {
+            // Get remaining viewers
+            const remaining = await getRemainingViewers(userData.user.id);
+            setRemainingViewers(remaining);
+          }
         }
       } catch (err) {
         console.error("Failed to check Supabase status:", err);
@@ -57,7 +66,6 @@ const StatusDashboard = () => {
 
   useEffect(() => {
     // Calculate trends based on historical data from Supabase
-    // For now, we'll use simulated trend data
     const calculateTrend = (current: number, total: number) => {
       if (total === 0) return { value: 0, positive: true };
       
@@ -93,6 +101,7 @@ const StatusDashboard = () => {
           <Skeleton className="h-32" />
           <Skeleton className="h-32" />
           <Skeleton className="h-32" />
+          {supabaseStatus === 'online' && <Skeleton className="h-32" />}
         </div>
       </div>
     );
@@ -165,7 +174,7 @@ const StatusDashboard = () => {
         <GlobalErrorDisplay />
       </div>
       
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatsCard 
           title="Slaves Online" 
           value={`${activeSlaves}/${slaves.length}`} 
@@ -200,6 +209,15 @@ const StatusDashboard = () => {
             }
           }}
         />
+        {remainingViewers !== null && (
+          <StatsCard 
+            title="Remaining Viewers" 
+            value={remainingViewers} 
+            icon={<Users className="h-4 w-4" />} 
+            description="Available in your plan"
+            className={remainingViewers < 5 ? "border-yellow-500 border" : ""}
+          />
+        )}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import StatusDashboard from '@/components/dashboard/StatusDashboard';
 import SlaveStatusCard from '@/components/dashboard/SlaveStatusCard';
@@ -13,14 +13,15 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Copy, Key } from 'lucide-react';
+import { Copy, Key, AlertCircle } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, canStartViewers, logViewerUsage } from '@/integrations/supabase/client';
 
 const Index = () => {
   const { slaves, viewers, logs, addCommand, updateSlave, removeViewer, clearLogs } = useAppContext();
   const [apiKey, setApiKey] = useState<string>('');
   const [showApiKey, setShowApiKey] = useState<boolean>(false);
+  const [userId, setUserId] = useState<string | null>(null);
   
   // Filter out duplicate slave entries to prevent multiple displays
   const uniqueSlaves = slaves.reduce((acc, current) => {
@@ -31,12 +32,22 @@ const Index = () => {
     return acc;
   }, [] as typeof slaves);
   
-  // Fetch API key from localStorage when component mounts
-  React.useEffect(() => {
+  // Fetch API key from localStorage and user from Supabase when component mounts
+  useEffect(() => {
     const storedKey = localStorage.getItem('slaveApiKey');
     if (storedKey) {
       setApiKey(storedKey);
     }
+
+    // Get current user
+    const fetchUser = async () => {
+      const { data } = await supabase.auth.getUser();
+      if (data?.user) {
+        setUserId(data.user.id);
+      }
+    };
+
+    fetchUser();
   }, []);
   
   const handleReconnectSlave = (id: string) => {
@@ -72,8 +83,36 @@ const Index = () => {
     }, 2000);
   };
   
-  const handleStopViewer = (id: string) => {
+  const handleStopViewer = async (id: string) => {
     removeViewer(id);
+  };
+
+  const handleStartViewer = async (command: Command) => {
+    // Check if user can start more viewers based on their plan
+    if (userId) {
+      const canStart = await canStartViewers(userId);
+      
+      if (!canStart) {
+        toast.error("You've reached your viewer limit. Please upgrade your plan for more viewers.");
+        return null;
+      }
+      
+      // Log the viewer usage
+      await logViewerUsage(userId, 1);
+    }
+    
+    // Proceed with adding the command
+    const commandId = `cmd-${Date.now()}`;
+    
+    const viewerCommand: Command = {
+      ...command,
+      id: commandId,
+      timestamp: new Date().toISOString(),
+      status: 'pending',
+    };
+    
+    addCommand(viewerCommand);
+    return commandId;
   };
   
   const generateApiKey = () => {
@@ -93,12 +132,6 @@ const Index = () => {
   const copyApiKey = () => {
     navigator.clipboard.writeText(apiKey);
     toast.success("API key copied to clipboard");
-  };
-  
-  const saveApiKeyToSupabase = async () => {
-    // This is just a demo function that shows how you might save the key to a database
-    // In a real app, you'd probably use a more secure method like Supabase Edge Function secrets
-    toast.info("In a production environment, you should set this key in the Supabase Edge Function secrets panel");
   };
   
   return (
@@ -190,7 +223,7 @@ const Index = () => {
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <LogsPanel logs={logs} onClearLogs={clearLogs} />
-          <CommandPanel slaves={uniqueSlaves} />
+          <CommandPanel slaves={uniqueSlaves} onCommand={handleStartViewer} />
         </div>
       </div>
     </Layout>
