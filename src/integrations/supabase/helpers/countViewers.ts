@@ -8,13 +8,14 @@ import { supabase } from '../client';
  * @returns Number of currently running viewers
  */
 export async function countRunningViewers(userId: string): Promise<number> {
-  const query: any = supabase
+  const query = supabase
     .from('viewers')
     .select('', { count: 'exact', head: true })
     .eq('user_id', userId)
     .eq('status', 'running');
 
-  const response = await query;
+  // Explizite Typumwandlung für weniger komplexe Typsystembelastung
+  const response = await query as unknown as { count: number | null, error: any };
 
   if (response?.error) {
     console.error('Error while counting viewers:', response.error);
