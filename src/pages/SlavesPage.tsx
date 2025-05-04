@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { useAppContext } from '@/context/AppContext';
@@ -20,13 +21,18 @@ const SlavesPage = () => {
   const [open, setOpen] = useState(false);
   const [selectedSlave, setSelectedSlave] = useState<SlaveServer | undefined>(undefined);
   
-  // Filter out any invalid slave entries
-  const validSlaves = slaves.filter(slave => 
-    slave && slave.name && slave.id && slave.hostname && slave.ip && slave.lastSeen
-  );
+  // Filter out duplicate slave entries based on id
+  const uniqueSlaves = slaves.reduce((acc, current) => {
+    const isDuplicate = acc.find((item) => item.id === current.id);
+    if (!isDuplicate && current && current.name && current.id && current.hostname && current.ip && current.lastSeen) {
+      return [...acc, current];
+    }
+    return acc;
+  }, [] as SlaveServer[]);
   
-  const onlineSlaves = validSlaves.filter(slave => slave.status === 'online').length;
-  const offlineSlaves = validSlaves.filter(slave => slave.status === 'offline' || slave.status === 'error').length;
+  // Now that we have unique slaves, we can calculate status counts
+  const onlineSlaves = uniqueSlaves.filter(slave => slave.status === 'online').length;
+  const offlineSlaves = uniqueSlaves.filter(slave => slave.status === 'offline' || slave.status === 'error').length;
   
   const handleReconnect = (id: string) => {
     // In a real app this would make an API call to reconnect to the slave
@@ -65,7 +71,7 @@ const SlavesPage = () => {
   }
   
   // Check if we have valid slaves
-  const hasSlaves = validSlaves.length > 0;
+  const hasSlaves = uniqueSlaves.length > 0;
   
   return (
     <Layout>
@@ -91,20 +97,20 @@ const SlavesPage = () => {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Online</span>
-                  <span className="text-sm">{onlineSlaves}/{validSlaves.length}</span>
+                  <span className="text-sm">{onlineSlaves}/{uniqueSlaves.length}</span>
                 </div>
                 <Progress 
-                  value={(onlineSlaves / Math.max(validSlaves.length, 1)) * 100} 
+                  value={(onlineSlaves / Math.max(uniqueSlaves.length, 1)) * 100} 
                   className="h-2 bg-muted" 
                   indicatorClassName="bg-status-success"
                 />
                 
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Offline</span>
-                  <span className="text-sm">{offlineSlaves}/{validSlaves.length}</span>
+                  <span className="text-sm">{offlineSlaves}/{uniqueSlaves.length}</span>
                 </div>
                 <Progress 
-                  value={(offlineSlaves / Math.max(validSlaves.length, 1)) * 100} 
+                  value={(offlineSlaves / Math.max(uniqueSlaves.length, 1)) * 100} 
                   className="h-2 bg-muted" 
                   indicatorClassName="bg-status-danger"
                 />
@@ -162,7 +168,7 @@ const SlavesPage = () => {
         
         <Card>
           <CardHeader>
-            <CardTitle>Slave Servers</CardTitle>
+            <CardTitle>Slave Servers ({uniqueSlaves.length})</CardTitle>
             <CardDescription>Manage your connected servers</CardDescription>
           </CardHeader>
           <CardContent>
@@ -191,7 +197,7 @@ const SlavesPage = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {validSlaves.map((slave) => (
+                  {uniqueSlaves.map((slave) => (
                     <TableRow key={slave.id}>
                       <TableCell>
                         <span 
