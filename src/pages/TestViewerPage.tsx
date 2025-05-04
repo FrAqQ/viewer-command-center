@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import { useAppContext } from '@/context/AppContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ViewerInstance, Proxy } from '@/types';
 import { supabase, getProxyUrlById } from '@/integrations/supabase/client';
+import { Loader2, PlayCircle, StopCircle, Trash2, Plus, Minus, RefreshCw } from 'lucide-react';
+import { toast } from '@/components/ui/sonner';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert';
 
 const TestViewerPage = () => {
   const { addViewer, removeViewer, updateViewer, viewers, proxies, slaves, isLoading, addCommand } = useAppContext();

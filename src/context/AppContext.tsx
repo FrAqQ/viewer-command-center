@@ -1,4 +1,3 @@
-
 import React, {
   createContext,
   useState,
@@ -8,7 +7,7 @@ import React, {
   SetStateAction,
 } from 'react';
 import { SlaveServer, Proxy, ViewerInstance, Command, LogEntry } from '@/types';
-import { v4 as uuidv4 } from 'uuid';
+import { v4 as uuidv4 } from '@/utils/uuid';
 import { toast } from '@/components/ui/sonner';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -17,6 +16,7 @@ interface AppContextType {
   proxies: Proxy[];
   viewers: ViewerInstance[];
   logs: LogEntry[];
+  commands: Command[];
   isLoading: boolean;
   addSlave: (slave: Omit<SlaveServer, 'id'>) => void;
   updateSlave: (id: string, updates: Partial<SlaveServer>) => void;
@@ -38,6 +38,7 @@ interface AppContextType {
   setProxies: Dispatch<SetStateAction<Proxy[]>>;
   setViewers: Dispatch<SetStateAction<ViewerInstance[]>>;
   setLogs: Dispatch<SetStateAction<LogEntry[]>>;
+  importProxies?: (proxyText: string) => void;
   user: any | null;
   userRoles: string[];
 }
@@ -75,6 +76,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   const [proxies, setProxies] = useState<Proxy[]>([]);
   const [viewers, setViewers] = useState<ViewerInstance[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [commands, setCommands] = useState<Command[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [user, setUser] = useState<any | null>(null);
   const [userRoles, setUserRoles] = useState<string[]>([]);
@@ -117,7 +119,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
     
     try {
       const controller = new AbortController();
-      const timeoutIdVal = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
       
       const proxyUrl = proxy.username && proxy.password
         ? `http://${proxy.username}:${proxy.password}@${proxy.address}:${proxy.port}`
@@ -132,13 +134,13 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
         proxy: proxyUrl
       });
       
-      clearTimeout(timeoutIdVal);
+      clearTimeout(timeoutId);
       updateProxy(id, { valid: true, lastChecked: new Date().toISOString(), failCount: 0 });
       toast.success(`Proxy ${proxy.address}:${proxy.port} is valid`);
     } catch (error: any) {
       // Using a fixed reference to avoid the error about timeoutId not existing
-      const timeoutIdVal = setTimeout(() => {}, 0);
-      clearTimeout(timeoutIdVal);
+      const timeoutId = setTimeout(() => {}, 0);
+      clearTimeout(timeoutId);
       console.error(`Proxy ${proxy.address}:${proxy.port} check failed:`, error);
       
       const failCount = proxy.failCount ? proxy.failCount + 1 : 1;
@@ -180,8 +182,8 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
       ...log,
       // Ensure details is a proper Record if present
       details: log.details ? (
-        typeof log.details === 'object' ? log.details : { value: log.details }
-      ) : undefined
+        typeof log.details === 'object' && log.details !== null ? log.details : { value: log.details }
+      ) : {}
     };
     setLogs(prevLogs => [newLog, ...prevLogs]);
   };
@@ -198,8 +200,8 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
       ...command 
     };
     
-    // Optimistically update the state
-    // setCommands(prevCommands => [...prevCommands, newCommand]);
+    // Update commands state
+    setCommands(prevCommands => [...prevCommands, newCommand]);
     
     const { data, error } = await supabase
       .from('commands')
@@ -224,9 +226,9 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   };
 
   const updateCommand = (id: string, updates: Partial<Command>) => {
-    // setCommands(prevCommands =>
-    //   prevCommands.map(command => (command.id === id ? { ...command, ...updates } : command))
-    // );
+    setCommands(prevCommands =>
+      prevCommands.map(command => (command.id === id ? { ...command, ...updates } : command))
+    );
   };
 
   const resetToDefaults = () => {
@@ -239,6 +241,43 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
     localStorage.removeItem('proxies');
     localStorage.removeItem('viewers');
     localStorage.removeItem('logs');
+  };
+
+  const importProxies = (proxyText: string) => {
+    if (!proxyText.trim()) return;
+    
+    const lines = proxyText.trim().split('\n');
+    const newProxies: Proxy[] = [];
+    
+    lines.forEach(line => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) return;
+      
+      const parts = trimmedLine.split(':');
+      
+      if (parts.length >= 2) {
+        const address = parts[0];
+        const port = parts[1];
+        const username = parts.length >= 3 ? parts[2] : undefined;
+        const password = parts.length >= 4 ? parts[3] : undefined;
+        
+        newProxies.push({
+          id: uuidv4(),
+          address,
+          port,
+          username,
+          password,
+          valid: true, // Assume valid until checked
+          lastChecked: new Date().toISOString(),
+          failCount: 0
+        });
+      }
+    });
+    
+    if (newProxies.length > 0) {
+      setProxies(prevProxies => [...prevProxies, ...newProxies]);
+      toast.success(`Imported ${newProxies.length} proxies`);
+    }
   };
 
   useEffect(() => {
@@ -331,9 +370,32 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
             source: log.source,
             message: log.message,
             timestamp: log.timestamp,
-            details: log.details || undefined
+            details: log.details ? (typeof log.details === 'object' ? log.details : { value: log.details }) : {}
           }));
           setLogs(mappedLogs);
+        }
+
+        // Load commands from Supabase
+        const { data: commandsData, error: commandsError } = await supabase
+          .from('commands')
+          .select('*')
+          .order('timestamp', { ascending: false })
+          .limit(50);
+        if (commandsError) {
+          console.error("Error fetching commands:", commandsError);
+          toast.error("Failed to load commands from Supabase: " + commandsError.message);
+        } else if (commandsData) {
+          // Map the data to match our Command type
+          const mappedCommands: Command[] = commandsData.map(cmd => ({
+            id: cmd.id,
+            type: cmd.type as 'spawn' | 'stop' | 'update_proxy' | 'reconnect' | 'custom',
+            target: cmd.target,
+            payload: cmd.payload || {},
+            timestamp: cmd.timestamp,
+            status: (cmd.status as 'pending' | 'executed' | 'failed') || 'pending',
+            result: cmd.result
+          }));
+          setCommands(mappedCommands);
         }
       } catch (error) {
         console.error("Unexpected error during data loading:", error);
@@ -386,6 +448,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
     proxies,
     viewers,
     logs,
+    commands,
     isLoading,
     addSlave,
     updateSlave,
@@ -407,6 +470,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
     setProxies,
     setViewers,
     setLogs,
+    importProxies,
     user,
     userRoles,
   };
