@@ -7,58 +7,93 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SlaveServer, Command } from '@/types';
 import { useApp } from '@/context/AppContext';
 import { PlayCircle, RefreshCw, StopCircle } from 'lucide-react';
-import { getProxyUrlById } from '@/integrations/supabase/client';
+import { getProxyUrlById, getRandomValidProxy } from '@/integrations/supabase/client';
+import { toast } from '@/components/ui/sonner';
 
 interface CommandPanelProps {
   slaves: SlaveServer[];
 }
 
 const CommandPanel: React.FC<CommandPanelProps> = ({ slaves }) => {
-  const { addCommand } = useApp();
+  const { addCommand, proxies } = useApp();
   const [url, setUrl] = useState('');
   const [slaveId, setSlaveId] = useState<string>('all');
   const [viewerCount, setViewerCount] = useState(1);
+  const [useRandomProxy, setUseRandomProxy] = useState(true);
+  const [selectedProxyId, setSelectedProxyId] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
   
-  const handleSendCommand = async (type: 'spawn' | 'stop' | 'update_proxy' | 'reconnect') => {
-    let payload: Record<string, any> = {};
-    
-    switch (type) {
-      case 'spawn':
-        if (viewerCount > 0) {
-          payload = { 
-            url, 
-            count: viewerCount 
-          };
-          
-          // If we're spawning viewers and a proxy is selected, add it to the payload
-          if (url && viewerCount > 0) {
-            // We could select a random proxy here if needed
-            // const randomProxy = await getRandomValidProxy();
-            // if (randomProxy) payload.proxy = randomProxy;
-          }
-        }
-        break;
-      case 'stop':
-        payload = { all: true };
-        break;
-      case 'update_proxy':
-        payload = { action: 'refresh' };
-        break;
-      case 'reconnect':
-        payload = {};
-        break;
+  const handleSendCommand = async (type: 'spawn' | 'stop' | 'update_proxy' | 'reconnect' | 'custom') => {
+    if (type === 'spawn' && !url.trim()) {
+      toast.error('Please enter a valid Twitch URL');
+      return;
     }
+
+    setIsLoading(true);
     
-    const command: Command = {
-      id: `cmd-${Date.now()}`,
-      type,
-      target: slaveId,
-      payload,
-      timestamp: new Date().toISOString(),
-      status: 'pending',
-    };
-    
-    await addCommand(command);
+    try {
+      let payload: Record<string, any> = {};
+      
+      switch (type) {
+        case 'spawn':
+          if (viewerCount > 0) {
+            // Base payload
+            payload = { 
+              url, 
+              count: viewerCount 
+            };
+            
+            // If we're using proxies, add them to the payload
+            if (useRandomProxy) {
+              // Get a random valid proxy
+              const randomProxy = await getRandomValidProxy();
+              if (randomProxy) {
+                payload.proxy = randomProxy;
+              } else {
+                toast.warning('No valid proxies found. Spawning viewers without proxy.');
+              }
+            } else if (selectedProxyId) {
+              // Get the selected proxy
+              const proxyUrl = await getProxyUrlById(selectedProxyId);
+              if (proxyUrl) {
+                payload.proxy = proxyUrl;
+              }
+            }
+          }
+          break;
+        case 'stop':
+          payload = { all: true };
+          break;
+        case 'update_proxy':
+          payload = { action: 'refresh' };
+          break;
+        case 'reconnect':
+          payload = {};
+          break;
+        case 'custom':
+          // Additional custom commands could be handled here
+          payload = {};
+          break;
+      }
+      
+      const command: Command = {
+        id: `cmd-${Date.now()}`,
+        type,
+        target: slaveId,
+        payload,
+        timestamp: new Date().toISOString(),
+        status: 'pending',
+      };
+      
+      await addCommand(command);
+      
+      toast.success(`Command "${type}" sent to ${slaveId === 'all' ? 'all slaves' : 'slave ' + slaveId}`);
+    } catch (error) {
+      console.error('Error sending command:', error);
+      toast.error(`Failed to send command: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
   
   return (
@@ -81,8 +116,8 @@ const CommandPanel: React.FC<CommandPanelProps> = ({ slaves }) => {
           <div className="space-y-2 flex-1">
             <label htmlFor="server" className="text-sm font-medium">Target Server</label>
             <Select 
+              value={slaveId}
               onValueChange={(value) => setSlaveId(value)} 
-              defaultValue="all"
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select server" />
@@ -113,23 +148,79 @@ const CommandPanel: React.FC<CommandPanelProps> = ({ slaves }) => {
           <Button 
             className="h-10" 
             onClick={() => handleSendCommand('spawn')} 
-            disabled={!url}
+            disabled={!url || isLoading}
+            isLoading={isLoading}
           >
             <PlayCircle className="h-4 w-4 mr-1" />
             Start
           </Button>
         </div>
         
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Proxy Settings</label>
+          <div className="flex space-x-2">
+            <Button 
+              variant={useRandomProxy ? "default" : "outline"}
+              onClick={() => setUseRandomProxy(true)}
+              className="flex-1"
+            >
+              Use Random Proxy
+            </Button>
+            <Button 
+              variant={!useRandomProxy ? "default" : "outline"}
+              onClick={() => setUseRandomProxy(false)}
+              className="flex-1"
+            >
+              Select Specific Proxy
+            </Button>
+          </div>
+          
+          {!useRandomProxy && (
+            <Select 
+              value={selectedProxyId}
+              onValueChange={setSelectedProxyId}
+              disabled={useRandomProxy}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a proxy" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">No Proxy</SelectItem>
+                {proxies.filter(p => p.valid).map((proxy) => (
+                  <SelectItem key={proxy.id} value={proxy.id}>
+                    {proxy.address}:{proxy.port}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+        
         <div className="grid grid-cols-3 gap-2 pt-2">
-          <Button variant="outline" className="w-full" onClick={() => handleSendCommand('stop')}>
+          <Button 
+            variant="outline" 
+            className="w-full" 
+            onClick={() => handleSendCommand('stop')}
+            disabled={isLoading}
+          >
             <StopCircle className="h-4 w-4 mr-1" />
             Stop All
           </Button>
-          <Button variant="outline" className="w-full" onClick={() => handleSendCommand('update_proxy')}>
+          <Button 
+            variant="outline" 
+            className="w-full" 
+            onClick={() => handleSendCommand('update_proxy')}
+            disabled={isLoading}
+          >
             <RefreshCw className="h-4 w-4 mr-1" />
             Rotate Proxies
           </Button>
-          <Button variant="outline" className="w-full" onClick={() => handleSendCommand('reconnect')}>
+          <Button 
+            variant="outline" 
+            className="w-full" 
+            onClick={() => handleSendCommand('reconnect')}
+            disabled={isLoading}
+          >
             <RefreshCw className="h-4 w-4 mr-1" />
             Reconnect
           </Button>

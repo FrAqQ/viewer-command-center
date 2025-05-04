@@ -33,3 +33,73 @@ export const getProxyUrlById = async (proxyId: string): Promise<string | null> =
   
   return `${data.address}:${data.port}`;
 };
+
+// Get random valid proxy
+export const getRandomValidProxy = async (): Promise<string | null> => {
+  const { data, error } = await supabase
+    .from('proxies')
+    .select('id, address, port, username, password')
+    .eq('valid', true)
+    .limit(50);
+    
+  if (error || !data || data.length === 0) {
+    console.error('Error fetching valid proxies:', error);
+    return null;
+  }
+  
+  // Select a random proxy from the result
+  const randomIndex = Math.floor(Math.random() * data.length);
+  const proxy = data[randomIndex];
+  
+  // Format: address:port:username:password or address:port
+  if (proxy.username && proxy.password) {
+    return `${proxy.address}:${proxy.port}:${proxy.username}:${proxy.password}`;
+  }
+  
+  return `${proxy.address}:${proxy.port}`;
+};
+
+// Fetch screenshot for a viewer
+export const getViewerScreenshot = async (viewerId: string): Promise<string | null> => {
+  const { data, error } = await supabase
+    .from('viewers')
+    .select('screenshot')
+    .eq('id', viewerId)
+    .single();
+    
+  if (error || !data || !data.screenshot) {
+    console.error('Error fetching viewer screenshot:', error);
+    return null;
+  }
+  
+  return data.screenshot;
+};
+
+// Send command to slaves
+export const sendCommand = async (command: {
+  type: 'spawn' | 'stop' | 'update_proxy' | 'reconnect' | 'custom';
+  target: string;
+  payload: Record<string, any>;
+}): Promise<string | null> => {
+  const { type, target, payload } = command;
+  
+  const { data, error } = await supabase
+    .from('commands')
+    .insert([{
+      type,
+      target,
+      payload,
+      timestamp: new Date().toISOString(),
+      status: 'pending'
+    }])
+    .select()
+    .single();
+    
+  if (error) {
+    console.error('Error sending command:', error);
+    return null;
+  }
+  
+  return data.id;
+};
+
