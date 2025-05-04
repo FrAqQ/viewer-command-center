@@ -185,44 +185,44 @@ export const canStartViewers = async (userId: string, requestedViewers: number =
   // Get plan limit
   const limit = await getUserPlanLimit(userId);
   
-  // Get current active viewers count with explicitly typed response to avoid deep instantiation
-  const { data, error } = await supabase
+  // Use count properly with type assertion to avoid excessive type instantiation
+  const response = await supabase
     .from('viewers')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
     .eq('status', 'running');
   
-  // Safely access the count property with fallback to 0
-  const currentViewers = data?.count || 0;
+  // Access count from the response object, not from data
+  const count = (response as any).count || 0;
   
-  if (error) {
-    console.error('Error checking active viewers:', error);
+  if (response.error) {
+    console.error('Error checking active viewers:', response.error);
     return false;
   }
   
-  return currentViewers + requestedViewers <= limit;
+  return count + requestedViewers <= limit;
 };
 
 // Get remaining viewers count for a user
 export const getRemainingViewers = async (userId: string): Promise<number> => {
   const limit = await getUserPlanLimit(userId);
   
-  // Get current active viewers count with explicitly typed response
-  const { data, error } = await supabase
+  // Use count properly with type assertion to avoid excessive type instantiation
+  const response = await supabase
     .from('viewers')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
     .eq('status', 'running');
   
-  // Safely access count property with fallback to 0
-  const currentViewers = data?.count || 0;
+  // Access count from the response object, not from data
+  const count = (response as any).count || 0;
   
-  if (error) {
-    console.error('Error checking remaining viewers:', error);
+  if (response.error) {
+    console.error('Error checking remaining viewers:', response.error);
     return 0;
   }
   
-  return Math.max(0, limit - currentViewers);
+  return Math.max(0, limit - count);
 };
 
 // Log viewer usage
