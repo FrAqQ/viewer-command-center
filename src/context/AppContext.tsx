@@ -376,7 +376,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
           setLogs(mappedLogs);
         }
 
-        // Load commands from Supabase - Fix the payload and result type issues
+        // Load commands from Supabase with proper type handling
         const { data: commandsData, error: commandsError } = await supabase
           .from('commands')
           .select('*')
@@ -386,7 +386,7 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
           console.error("Error fetching commands:", commandsError);
           toast.error("Failed to load commands from Supabase: " + commandsError.message);
         } else if (commandsData) {
-          // Map the data to match our Command type
+          // Map the data to match our Command type with proper type handling for result
           const mappedCommands: Command[] = commandsData.map(cmd => ({
             id: cmd.id,
             type: cmd.type as 'spawn' | 'stop' | 'update_proxy' | 'reconnect' | 'custom',
@@ -394,7 +394,12 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
             payload: typeof cmd.payload === 'object' && cmd.payload !== null ? cmd.payload as Record<string, any> : { value: cmd.payload },
             timestamp: cmd.timestamp,
             status: (cmd.status as 'pending' | 'executed' | 'failed') || 'pending',
-            result: cmd.result !== undefined ? (typeof cmd.result === 'object' && cmd.result !== null ? cmd.result as Record<string, any> : { value: cmd.result }) : undefined
+            // Only include result if it exists in the data
+            ...(cmd.result !== undefined && { 
+              result: typeof cmd.result === 'object' && cmd.result !== null ? 
+                cmd.result as Record<string, any> : 
+                { value: cmd.result } 
+            })
           }));
           setCommands(mappedCommands);
         }

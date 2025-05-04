@@ -42,7 +42,7 @@ export interface Command {
   payload: Record<string, any>;
   timestamp: string;
   status: 'pending' | 'executed' | 'failed';
-  result?: Record<string, any>;
+  result?: Record<string, any>; // Added the result property as optional
 }
 
 export interface LogEntry {
