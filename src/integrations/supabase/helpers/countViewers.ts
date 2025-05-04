@@ -9,19 +9,19 @@ import { supabase } from '../client';
  */
 export async function countRunningViewers(userId: string): Promise<number> {
   try {
-    // Use 'id' column instead of empty string to prevent deep type instantiation
-    const response = await (supabase
+    // Use '*' column instead of empty string to prevent deep type instantiation
+    const { count, error } = await supabase
       .from('viewers')
-      .select('id', { count: 'exact', head: true })
+      .select('*', { count: 'exact', head: true })
       .eq('user_id', userId)
-      .eq('status', 'running')) as unknown as { count: number | null; error?: any };
+      .eq('status', 'running');
 
-    if (response?.error) {
-      console.error('Error while counting viewers:', response.error);
+    if (error) {
+      console.error('Error while counting viewers:', error);
       return 0;
     }
 
-    return response.count || 0;
+    return count || 0;
   } catch (error) {
     console.error('Unexpected error counting viewers:', error);
     return 0;
