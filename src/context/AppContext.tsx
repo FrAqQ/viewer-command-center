@@ -72,7 +72,7 @@ function useLocalStorage<T>(key: string, initialValue: T): [T, (value: SetStateA
 }
 
 const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
-  // Hier bewusst leere Arrays setzen
+  // Leere Arrays als Standardwerte setzen
   const [slaves, setSlaves] = useState<SlaveServer[]>([]);
   const [proxies, setProxies] = useState<Proxy[]>([]);
   const [viewers, setViewers] = useState<ViewerInstance[]>([]);
@@ -83,7 +83,6 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   const [userRoles, setUserRoles] = useState<string[]>([]);
   
   // ... keep existing code (addSlave, updateSlave, removeSlave)
-  
   const addSlave = (slave: Omit<SlaveServer, 'id'>) => {
     const newSlave: SlaveServer = { id: uuidv4(), ...slave };
     setSlaves(prevSlaves => [...prevSlaves, newSlave]);
@@ -98,9 +97,8 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   const removeSlave = (id: string) => {
     setSlaves(prevSlaves => prevSlaves.filter(slave => slave.id !== id));
   };
-
-  // ... keep existing code (addProxy, updateProxy, removeProxy, checkProxy, checkAllProxies)
   
+  // ... keep existing code (addProxy, updateProxy, removeProxy, checkProxy, checkAllProxies)
   const addProxy = (proxy: Omit<Proxy, 'id'>) => {
     const newProxy: Proxy = { id: uuidv4(), ...proxy };
     setProxies(prevProxies => [...prevProxies, newProxy]);
@@ -166,7 +164,6 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   };
 
   // ... keep existing code (addViewer, updateViewer, removeViewer, addLog, clearLogs)
-  
   const addViewer = (viewer: Omit<ViewerInstance, 'id'>) => {
     const newViewer: ViewerInstance = { id: uuidv4(), ...viewer };
     setViewers(prevViewers => [...prevViewers, newViewer]);
@@ -199,7 +196,6 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   };
 
   // ... keep existing code (addCommand, updateCommand, resetToDefaults, importProxies)
-  
   const addCommand = async (command: Omit<Command, 'id' | 'timestamp' | 'status'>): Promise<string | null> => {
     const newCommand: Command = { 
       id: uuidv4(), 
@@ -290,134 +286,168 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Load slaves from Supabase
+        // Slave-Daten von Supabase laden
         const { data: slavesData, error: slavesError } = await supabase
           .from('slaves')
           .select('*')
           .order('name', { ascending: true });
+          
         if (slavesError) {
           console.error("Error fetching slaves:", slavesError);
           toast.error("Failed to load slaves from Supabase: " + slavesError.message);
         } else if (slavesData && slavesData.length > 0) {
-          // Nur laden, wenn tatsächlich Daten vorhanden sind
-          const mappedSlaves: SlaveServer[] = slavesData.map(slave => ({
-            id: slave.id,
-            name: slave.name,
-            hostname: slave.hostname,
-            ip: slave.ip,
-            status: (slave.status as 'online' | 'offline' | 'error') || 'offline',
-            lastSeen: slave.last_seen,
-            metrics: {
-              cpu: slave.cpu || 0,
-              ram: slave.ram || 0,
-              instances: slave.instances || 0
-            }
-          }));
-          setSlaves(mappedSlaves);
+          // Daten nur laden, wenn sie gültig sind und tatsächlich existieren
+          const validSlaves = slavesData.filter(slave => 
+            slave && slave.name && slave.hostname && slave.ip
+          );
+          
+          if (validSlaves.length > 0) {
+            const mappedSlaves: SlaveServer[] = validSlaves.map(slave => ({
+              id: slave.id,
+              name: slave.name,
+              hostname: slave.hostname,
+              ip: slave.ip,
+              status: (slave.status as 'online' | 'offline' | 'error') || 'offline',
+              lastSeen: slave.last_seen || new Date().toISOString(),
+              metrics: {
+                cpu: slave.cpu || 0,
+                ram: slave.ram || 0,
+                instances: slave.instances || 0
+              }
+            }));
+            setSlaves(mappedSlaves);
+          }
         }
         
         // ... keep existing code (load other data from Supabase)
-        
-        // Load proxies from Supabase
+        // Proxies laden
         const { data: proxiesData, error: proxiesError } = await supabase
           .from('proxies')
           .select('*')
           .order('address', { ascending: true });
+          
         if (proxiesError) {
           console.error("Error fetching proxies:", proxiesError);
           toast.error("Failed to load proxies from Supabase: " + proxiesError.message);
         } else if (proxiesData && proxiesData.length > 0) {
-          // Nur laden, wenn tatsächlich Daten vorhanden sind
-          const mappedProxies: Proxy[] = proxiesData.map(proxy => ({
-            id: proxy.id,
-            address: proxy.address,
-            port: proxy.port,
-            username: proxy.username || undefined,
-            password: proxy.password || undefined,
-            valid: proxy.valid || false,
-            lastChecked: proxy.last_checked,
-            failCount: proxy.fail_count || 0
-          }));
-          setProxies(mappedProxies);
+          // Daten nur laden, wenn sie gültig sind
+          const validProxies = proxiesData.filter(proxy => 
+            proxy && proxy.address && proxy.port
+          );
+          
+          if (validProxies.length > 0) {
+            const mappedProxies: Proxy[] = validProxies.map(proxy => ({
+              id: proxy.id,
+              address: proxy.address,
+              port: proxy.port,
+              username: proxy.username || undefined,
+              password: proxy.password || undefined,
+              valid: proxy.valid || false,
+              lastChecked: proxy.last_checked || new Date().toISOString(),
+              failCount: proxy.fail_count || 0
+            }));
+            setProxies(mappedProxies);
+          }
         }
         
-        // Load viewers from Supabase
+        // Viewers laden
         const { data: viewersData, error: viewersError } = await supabase
           .from('viewers')
           .select('*');
+          
         if (viewersError) {
           console.error("Error fetching viewers:", viewersError);
           toast.error("Failed to load viewers from Supabase: " + viewersError.message);
         } else if (viewersData && viewersData.length > 0) {
-          // Nur laden, wenn tatsächlich Daten vorhanden sind
-          const mappedViewers: ViewerInstance[] = viewersData.map(viewer => ({
-            id: viewer.id,
-            url: viewer.url,
-            slaveId: viewer.slave_id || undefined,
-            proxy: viewer.proxy_id || undefined,
-            status: (viewer.status as 'running' | 'stopped' | 'error') || 'stopped',
-            startTime: viewer.start_time,
-            error: viewer.error || undefined
-          }));
-          setViewers(mappedViewers);
+          // Daten nur laden, wenn sie gültig sind
+          const validViewers = viewersData.filter(viewer => 
+            viewer && viewer.url
+          );
+          
+          if (validViewers.length > 0) {
+            const mappedViewers: ViewerInstance[] = validViewers.map(viewer => ({
+              id: viewer.id,
+              url: viewer.url,
+              slaveId: viewer.slave_id || undefined,
+              proxy: viewer.proxy_id || undefined,
+              status: (viewer.status as 'running' | 'stopped' | 'error') || 'stopped',
+              startTime: viewer.start_time || new Date().toISOString(),
+              error: viewer.error || undefined
+            }));
+            setViewers(mappedViewers);
+          }
         }
         
-        // Load logs from Supabase
+        // Logs laden
         const { data: logsData, error: logsError } = await supabase
           .from('logs')
           .select('*')
           .order('timestamp', { ascending: false })
           .limit(50);
+          
         if (logsError) {
           console.error("Error fetching logs:", logsError);
           toast.error("Failed to load logs from Supabase: " + logsError.message);
         } else if (logsData && logsData.length > 0) {
-          // Nur laden, wenn tatsächlich Daten vorhanden sind
-          const mappedLogs: LogEntry[] = logsData.map(log => ({
-            id: log.id,
-            level: (log.level as 'error' | 'info' | 'warning') || 'info',
-            source: log.source,
-            message: log.message,
-            timestamp: log.timestamp,
-            details: log.details ? (typeof log.details === 'object' ? log.details : { value: log.details }) : {}
-          }));
-          setLogs(mappedLogs);
+          // Daten nur laden, wenn sie gültig sind
+          const validLogs = logsData.filter(log => 
+            log && log.level && log.source && log.message
+          );
+          
+          if (validLogs.length > 0) {
+            const mappedLogs: LogEntry[] = validLogs.map(log => ({
+              id: log.id,
+              level: (log.level as 'error' | 'info' | 'warning') || 'info',
+              source: log.source,
+              message: log.message,
+              timestamp: log.timestamp || new Date().toISOString(),
+              details: log.details ? (typeof log.details === 'object' ? log.details : { value: log.details }) : {}
+            }));
+            setLogs(mappedLogs);
+          }
         }
 
-        // Load commands from Supabase
+        // Befehle laden
         const { data: commandsData, error: commandsError } = await supabase
           .from('commands')
           .select('*')
           .order('timestamp', { ascending: false })
           .limit(50);
+          
         if (commandsError) {
           console.error("Error fetching commands:", commandsError);
           toast.error("Failed to load commands from Supabase: " + commandsError.message);
         } else if (commandsData && commandsData.length > 0) {
-          // Nur laden, wenn tatsächlich Daten vorhanden sind
-          const mappedCommands: Command[] = commandsData.map(cmd => {
-            // Create base command object
-            const commandObj: Command = {
-              id: cmd.id,
-              type: cmd.type as 'spawn' | 'stop' | 'update_proxy' | 'reconnect' | 'custom',
-              target: cmd.target,
-              payload: typeof cmd.payload === 'object' && cmd.payload !== null ? 
-                cmd.payload as Record<string, any> : 
-                { value: cmd.payload },
-              timestamp: cmd.timestamp,
-              status: (cmd.status as 'pending' | 'executed' | 'failed') || 'pending',
-            };
-            
-            // Add result property if it exists in the data
-            if ('result' in cmd && cmd.result !== undefined) {
-              commandObj.result = typeof cmd.result === 'object' && cmd.result !== null ? 
-                cmd.result as Record<string, any> : 
-                { value: cmd.result };
-            }
-            
-            return commandObj;
-          });
-          setCommands(mappedCommands);
+          // Daten nur laden, wenn sie gültig sind
+          const validCommands = commandsData.filter(cmd => 
+            cmd && cmd.type && cmd.target
+          );
+          
+          if (validCommands.length > 0) {
+            const mappedCommands: Command[] = validCommands.map(cmd => {
+              // Grundlegendes Command-Objekt erstellen
+              const commandObj: Command = {
+                id: cmd.id,
+                type: cmd.type as 'spawn' | 'stop' | 'update_proxy' | 'reconnect' | 'custom',
+                target: cmd.target,
+                payload: typeof cmd.payload === 'object' && cmd.payload !== null ? 
+                  cmd.payload as Record<string, any> : 
+                  { value: cmd.payload },
+                timestamp: cmd.timestamp || new Date().toISOString(),
+                status: (cmd.status as 'pending' | 'executed' | 'failed') || 'pending',
+              };
+              
+              // Result-Eigenschaft hinzufügen, wenn sie in den Daten existiert
+              if ('result' in cmd && cmd.result !== undefined && cmd.result !== null) {
+                commandObj.result = typeof cmd.result === 'object' ? 
+                  cmd.result as Record<string, any> : 
+                  { value: cmd.result };
+              }
+              
+              return commandObj;
+            });
+            setCommands(mappedCommands);
+          }
         }
       } catch (error) {
         console.error("Unexpected error during data loading:", error);
@@ -431,7 +461,6 @@ const AppProvider: React.FC<{children: React.ReactNode}> = ({ children }) => {
   }, []);
 
   // ... keep existing code (authentication handling)
-  
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
