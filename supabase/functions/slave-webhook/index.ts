@@ -100,64 +100,37 @@ async function handleStatusUpdate(slaveId: string, slaveName: string, data: any)
 
   const { status, metrics } = data
 
-  // Check if the slave exists
-  const { data: existingSlave, error: checkError } = await supabaseClient
+  // Use upsert with conflict target on id instead of checking existence first
+  const { data: upsertedSlave, error: upsertError } = await supabaseClient
     .from('slaves')
-    .select('id')
+    .upsert([{
+      id: slaveId,
+      name: slaveName,
+      hostname: data.hostname || 'Unknown',
+      ip: data.ip || '0.0.0.0',
+      status: status,
+      last_seen: new Date().toISOString(),
+      cpu: metrics?.cpu || 0,
+      ram: metrics?.ram || 0,
+      instances: metrics?.instances || 0
+    }], { 
+      onConflict: 'id'  // Important: This ensures we update existing records
+    })
+    .select()
+
+  if (upsertError) {
+    throw new Error(`Error upserting slave: ${upsertError.message}`)
+  }
+
+  // Only log when a new slave is registered (not when updating)
+  const { data: existingSlave } = await supabaseClient
+    .from('slaves')
+    .select('created_at')
     .eq('id', slaveId)
     .single()
 
-  if (checkError && checkError.code !== 'PGRST116') { // PGRST116 is "not found" error
-    throw new Error(`Error checking slave existence: ${checkError.message}`)
-  }
-
-  let result
-  
-  // Update or insert slave
-  if (existingSlave) {
-    // Update existing slave
-    const { data: updatedSlave, error: updateError } = await supabaseClient
-      .from('slaves')
-      .update({
-        name: slaveName,
-        status: status,
-        last_seen: new Date().toISOString(),
-        cpu: metrics?.cpu,
-        ram: metrics?.ram,
-        instances: metrics?.instances,
-      })
-      .eq('id', slaveId)
-      .select()
-
-    if (updateError) {
-      throw new Error(`Error updating slave: ${updateError.message}`)
-    }
-    
-    result = updatedSlave
-  } else {
-    // Insert new slave
-    const { data: newSlave, error: insertError } = await supabaseClient
-      .from('slaves')
-      .insert({
-        id: slaveId,
-        name: slaveName,
-        hostname: data.hostname || 'Unknown',
-        ip: data.ip || '0.0.0.0',
-        status: status,
-        last_seen: new Date().toISOString(),
-        cpu: metrics?.cpu || 0,
-        ram: metrics?.ram || 0,
-        instances: metrics?.instances || 0,
-      })
-      .select()
-
-    if (insertError) {
-      throw new Error(`Error inserting new slave: ${insertError.message}`)
-    }
-    
-    result = newSlave
-    
-    // Log the new slave registration
+  // If the created_at timestamp is very recent, this was likely a new insert
+  if (existingSlave && new Date().getTime() - new Date(existingSlave.created_at).getTime() < 5000) {
     await supabaseClient
       .from('logs')
       .insert({
@@ -175,7 +148,7 @@ async function handleStatusUpdate(slaveId: string, slaveName: string, data: any)
   return new Response(JSON.stringify({ 
     success: true, 
     message: 'Status updated successfully',
-    data: result
+    data: upsertedSlave
   }), {
     status: 200,
     headers: {
@@ -203,73 +176,37 @@ async function handleViewerUpdate(slaveId: string, data: any) {
       continue
     }
 
-    // Check if viewer exists
-    const { data: existingViewer } = await supabaseClient
-      .from('viewers')
-      .select('id')
-      .eq('id', id)
-      .maybeSingle()
-
     // Check if the screenshot column exists
     const hasScreenshotColumn = await checkColumnExists('viewers', 'screenshot')
 
-    let result
+    // Use upsert with conflict target on id
+    const upsertData: any = {
+      id,
+      slave_id: slaveId,
+      url,
+      proxy,
+      status,
+      error: error || null
+    }
     
-    if (existingViewer) {
-      // Update existing viewer
-      const updateData: any = {
-        slave_id: slaveId,
-        status: status,
-        error: error || null
-      }
-      
-      // Only add screenshot if the column exists and screenshot is provided
-      if (hasScreenshotColumn && screenshot) {
-        updateData.screenshot = screenshot
-      }
-      
-      const { data: updatedViewer, error: updateError } = await supabaseClient
-        .from('viewers')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-
-      if (updateError) {
-        console.error(`Error updating viewer ${id}:`, updateError)
-        continue
-      }
-      
-      result = updatedViewer
-    } else {
-      // Insert new viewer
-      const insertData: any = {
-        id,
-        slave_id: slaveId,
-        url,
-        proxy,
-        status,
-        error: error || null
-      }
-      
-      // Only add screenshot if the column exists and screenshot is provided
-      if (hasScreenshotColumn && screenshot) {
-        insertData.screenshot = screenshot
-      }
-      
-      const { data: newViewer, error: insertError } = await supabaseClient
-        .from('viewers')
-        .insert(insertData)
-        .select()
-
-      if (insertError) {
-        console.error(`Error inserting viewer ${id}:`, insertError)
-        continue
-      }
-      
-      result = newViewer
+    // Only add screenshot if the column exists and screenshot is provided
+    if (hasScreenshotColumn && screenshot) {
+      upsertData.screenshot = screenshot
     }
 
-    results.push(result)
+    const { data: upsertedViewer, error: upsertError } = await supabaseClient
+      .from('viewers')
+      .upsert([upsertData], { 
+        onConflict: 'id' 
+      })
+      .select()
+
+    if (upsertError) {
+      console.error(`Error upserting viewer ${id}:`, upsertError)
+      continue
+    }
+    
+    results.push(upsertedViewer)
   }
 
   return new Response(JSON.stringify({ 
