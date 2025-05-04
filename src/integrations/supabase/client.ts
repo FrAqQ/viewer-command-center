@@ -185,13 +185,13 @@ export const canStartViewers = async (userId: string, requestedViewers: number =
   // Get plan limit
   const limit = await getUserPlanLimit(userId);
   
-  // ⚠️ TypeScript Workaround: Using `any` to avoid TS2589 (deep type instantiation) error.
+  // ⚠️ TypeScript Workaround: Using `as unknown as any` to avoid TS2589 (deep type instantiation) error.
   // This query only returns a `count`, and we don't need full type inference for it.
-  const response: any = await supabase
+  const response = await (supabase
     .from('viewers')
     .select('', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .eq('status', 'running');
+    .eq('status', 'running') as unknown as any);
   
   const count = response?.count || 0;
   
@@ -207,13 +207,13 @@ export const canStartViewers = async (userId: string, requestedViewers: number =
 export const getRemainingViewers = async (userId: string): Promise<number> => {
   const limit = await getUserPlanLimit(userId);
   
-  // ⚠️ TypeScript Workaround: Using `any` to avoid TS2589 (deep type instantiation) error.
+  // ⚠️ TypeScript Workaround: Using `as unknown as any` to avoid TS2589 (deep type instantiation) error.
   // This query only returns a `count`, and we don't need full type inference for it.
-  const response: any = await supabase
+  const response = await (supabase
     .from('viewers')
     .select('', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .eq('status', 'running');
+    .eq('status', 'running') as unknown as any);
   
   const count = response?.count || 0;
   
