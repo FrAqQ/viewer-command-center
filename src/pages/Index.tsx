@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import Layout from '@/components/Layout';
 import StatusDashboard from '@/components/dashboard/StatusDashboard';
@@ -20,6 +21,15 @@ const Index = () => {
   const { slaves, viewers, logs, addCommand, updateSlave, removeViewer, clearLogs } = useAppContext();
   const [apiKey, setApiKey] = useState<string>('');
   const [showApiKey, setShowApiKey] = useState<boolean>(false);
+  
+  // Filter out duplicate slave entries to prevent multiple displays
+  const uniqueSlaves = slaves.reduce((acc, current) => {
+    const isDuplicate = acc.find((item) => item.id === current.id);
+    if (!isDuplicate && current && current.name && current.id && current.hostname && current.ip && current.lastSeen) {
+      return [...acc, current];
+    }
+    return acc;
+  }, [] as typeof slaves);
   
   // Fetch API key from localStorage when component mounts
   React.useEffect(() => {
@@ -168,7 +178,7 @@ const Index = () => {
         <StatusDashboard />
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {slaves.map((slave) => (
+          {uniqueSlaves.map((slave) => (
             <SlaveStatusCard key={slave.id} slave={slave} onReconnect={handleReconnectSlave} />
           ))}
         </div>
@@ -180,7 +190,7 @@ const Index = () => {
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <LogsPanel logs={logs} onClearLogs={clearLogs} />
-          <CommandPanel slaves={slaves} />
+          <CommandPanel slaves={uniqueSlaves} />
         </div>
       </div>
     </Layout>
