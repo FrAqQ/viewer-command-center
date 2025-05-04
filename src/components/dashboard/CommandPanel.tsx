@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,9 +12,10 @@ import { toast } from '@/components/ui/sonner';
 
 interface CommandPanelProps {
   slaves: SlaveServer[];
+  onCommand?: (command: Command) => Promise<string | null>;
 }
 
-const CommandPanel: React.FC<CommandPanelProps> = ({ slaves }) => {
+const CommandPanel: React.FC<CommandPanelProps> = ({ slaves, onCommand }) => {
   const { addCommand, proxies } = useAppContext();
   const [url, setUrl] = useState('');
   const [slaveId, setSlaveId] = useState<string>('all');
@@ -84,7 +86,12 @@ const CommandPanel: React.FC<CommandPanelProps> = ({ slaves }) => {
         status: 'pending',
       };
       
-      await addCommand(command);
+      // Use the onCommand prop if it exists, otherwise use addCommand from context
+      if (onCommand) {
+        await onCommand(command);
+      } else {
+        await addCommand(command);
+      }
       
       toast.success(`Command "${type}" sent to ${slaveId === 'all' ? 'all slaves' : 'slave ' + slaveId}`);
     } catch (error) {
